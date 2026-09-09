@@ -156,16 +156,17 @@ jobs:
           $ErrorActionPreference = "Continue"
           Write-Host "=== Starting GUI Apps Auto-Installation ==="
 
-          # 1. WhatsApp Desktop
+          # 1. WhatsApp Desktop (Langsung tembak ke Desktop RDP)
           Write-Host "[1/11] Installing WhatsApp Desktop..."
           if ($env:WA_URL) {
               try {
-                  $waPath = Join-Path $env:TEMP "whatsapp.msixbundle"
+                  $waPath = "C:\Users\RDP\Desktop\WhatsApp_Installer.msixbundle"
                   Invoke-WebRequest -Uri $env:WA_URL -OutFile $waPath -UseBasicParsing
-                  Add-AppxPackage -Path $waPath -AllUsers
-                  Write-Host "WhatsApp Desktop installed successfully!"
+                  Write-Host "File Installer WA berhasil ditaruh di Desktop!"
+                  Add-AppxPackage -Path $waPath
+                  Write-Host "WhatsApp Desktop auto-install attempted!"
               } catch { 
-                  Write-Warning "WhatsApp gagal (Windows Server lack of dependencies). $_" 
+                  Write-Warning "Auto-install WA ditolak Windows. Silakan double-click file WhatsApp di Desktop saat login RDP!" 
               }
           } else { Write-Host "Secret WA_DESKTOP_URL kosong, skip WhatsApp..." }
 
@@ -181,7 +182,7 @@ jobs:
           Write-Host "[4/11] Installing Trae Code..."
           try {
               winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Warning "Trae Code gagal: $_" }
+          } catch { Write-Warning "Trae Code gagal via winget. $_" }
 
           # 5. OpenCode Desktop
           Write-Host "[5/11] Installing OpenCode Desktop..."
@@ -205,7 +206,7 @@ jobs:
           Write-Host "[8/11] Installing Antigravity..."
           try {
               winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Warning "Antigravity gagal: $_" }
+          } catch { Write-Warning "Antigravity gagal via winget. $_" }
 
           # 9. PDF Office / PDF24
           Write-Host "[9/11] Installing PDF24..."
@@ -215,7 +216,7 @@ jobs:
           Write-Host "[10/11] Installing Spotify..."
           choco install spotify -y --ignore-checksums
 
-          # 11. Canva Desktop (Fix Pake Direct Download)
+          # 11. Canva Desktop
           Write-Host "[11/11] Installing Canva..."
           try {
               $canvaUrl = "https://desktop-release.canva.com/Canva%20Setup.exe"
@@ -227,7 +228,7 @@ jobs:
 
           Write-Host "=== All GUI Apps Installation Completed ==="
           
-          # Hack Anti-Gagal: Memaksa exit code 0 biar workflow tetep jalan lancar jaya!
+          # Hack Anti-Gagal: Memaksa exit code 0 biar workflow tetep jalan mulus!
           exit 0
 
       - name: Sync App Shortcuts, System PATH & Permissions
@@ -260,13 +261,22 @@ jobs:
           icacls "C:\ProgramData\npm" /grant "RDP:(OI)(CI)F" /T /q
           icacls "C:\Users\RDP" /grant "RDP:(OI)(CI)F" /T /q
           
-          # 3. Copy semua shortcut ke RDP
+          # 3. Copy ONLY whitelisted shortcuts ke RDP Desktop
           $rdpDesktop = "C:\Users\RDP\Desktop"
-          $publicDesktop = "C:\Users\Public\Desktop"
           $runnerDesktop = "C:\Users\runneradmin\Desktop"
           
+          $allowedApps = @("Brave", "Canva", "Discord", "Telegram", "Spotify", "Android Studio", "Trae", "OpenCode", "PDF24", "Antigravity", "Ollama")
+          
           if (Test-Path $runnerDesktop) {
-              Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue | Copy-Item -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+              $allShortcuts = Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
+              foreach ($shortcut in $allShortcuts) {
+                  foreach ($app in $allowedApps) {
+                      if ($shortcut.Name -match $app) {
+                          Copy-Item -Path $shortcut.FullName -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+                          break
+                      }
+                  }
+              }
           }
           
           $startMenuPaths = @(
@@ -276,12 +286,19 @@ jobs:
           
           foreach ($path in $startMenuPaths) {
               if (Test-Path $path) {
-                  Get-ChildItem -Path $path -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue | Copy-Item -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
-                  Get-ChildItem -Path $path -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue | Copy-Item -Destination $publicDesktop -Force -ErrorAction SilentlyContinue
+                  $allStartMenuShortcuts = Get-ChildItem -Path $path -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
+                  foreach ($shortcut in $allStartMenuShortcuts) {
+                      foreach ($app in $allowedApps) {
+                          if ($shortcut.Name -match $app) {
+                              Copy-Item -Path $shortcut.FullName -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+                              break
+                          }
+                      }
+                  }
               }
           }
           
-          Write-Host "System PATH Registry & Shortcuts successfully updated for RDP User!"
+          Write-Host "System PATH Registry & Cleaned Shortcuts successfully updated for RDP User!"
           exit 0
 
       - name: Auto Clone Private Repository
