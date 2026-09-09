@@ -47,33 +47,39 @@ jobs:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
           $ErrorActionPreference = "Continue"
+          $ProgressPreference = "SilentlyContinue" # Mute semua indikator loading bawaan PowerShell
+          
           Write-Host "=== Setting up CLI Tools & AI Configs ==="
 
           $hardcoded9routerUrl = "https://9router.nelsen.web.id/v1"
           $apiKey = if ($env:CLAUDE_API_KEY) { $env:CLAUDE_API_KEY } else { "" }
 
           # 1. Config Git
+          Write-Host "[1/6] Setup Git..."
           git config --system user.name "${{ secrets.GH_USERNAME }}"
           git config --system user.email "${{ secrets.GH_USERNAME }}@users.noreply.github.com"
 
           # 2. Config NPM Global
+          Write-Host "[2/6] Setup NPM..."
           New-Item -ItemType Directory -Force -Path "C:\ProgramData\npm"
           npm config set prefix "C:\ProgramData\npm" --global
 
-          # 3. Ollama
+          # 3. Ollama (Portable ZIP)
+          Write-Host "[3/6] Setup Ollama..."
           try {
-              $ProgressPreference = 'SilentlyContinue'
-              $ollamaUrl = "https://ollama.com/download/OllamaSetup.exe"
-              $ollamaPath = Join-Path $env:TEMP "OllamaSetup.exe"
-              Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath -UseBasicParsing
-              Start-Process $ollamaPath -ArgumentList "/silent" -Wait
-              Stop-Process -Name "ollama" -Force -ErrorAction SilentlyContinue
-          } catch { Write-Warning "Ollama gagal" }
+              $ollamaZipUrl = "https://ollama.com/download/ollama-windows-amd64.zip"
+              $ollamaZipPath = Join-Path $env:TEMP "ollama.zip"
+              $ollamaExtractPath = "C:\Program Files\Ollama"
+              Invoke-WebRequest -Uri $ollamaZipUrl -OutFile $ollamaZipPath -UseBasicParsing
+              Expand-Archive -Path $ollamaZipPath -DestinationPath $ollamaExtractPath -Force
+          } catch { Write-Warning "Ollama gagal didownload" }
 
-          # 4. Claude Code
-          npm install -g @anthropic-ai/claude-code
+          # 4. Claude Code (Mute animasi NPM)
+          Write-Host "[4/6] Setup Claude Code..."
+          npm install -g @anthropic-ai/claude-code --no-progress --fund=false --audit=false
 
-          # 5. Machine Level Environment Variables (Biar lgsg nempel ke RDP user)
+          # 5. Machine Level Environment Variables
+          Write-Host "[5/6] Setup Env Vars..."
           [Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", $hardcoded9routerUrl, "Machine")
           [Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", $hardcoded9routerUrl, "Machine")
           
@@ -84,10 +90,10 @@ jobs:
           }
           
           # 6. Auto-Setup JSON Scripts (Dijalankan via Public Startup)
+          Write-Host "[6/6] Setup Startup Scripts..."
           $startupFolder = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
           $initScriptPath = "$startupFolder\init_ai_configs.ps1"
           
-          # Tulis file script startup baris per baris biar aman dari error YAML
           New-Item -ItemType File -Force -Path $initScriptPath
           Add-Content -Path $initScriptPath -Value "`$userProfile = `$env:USERPROFILE"
           Add-Content -Path $initScriptPath -Value "`$claudeDir = Join-Path `$userProfile '.claude'"
@@ -102,7 +108,6 @@ jobs:
           Add-Content -Path $initScriptPath -Value "foreach (`$d in `$opencodeDirs) { Set-Content -Path (Join-Path `$d 'config.json') -Value `$opencodeJsonStr -Encoding UTF8 }"
           Add-Content -Path $initScriptPath -Value "Remove-Item -Path `$PSCommandPath -Force"
           
-          # Bikin shortcut biar powershell eksekusi script ini saat startup
           $wshShell = New-Object -ComObject WScript.Shell
           $shortcut = $wshShell.CreateShortcut("$startupFolder\InitAIConfigs.lnk")
           $shortcut.TargetPath = "powershell.exe"
@@ -117,8 +122,11 @@ jobs:
           WA_URL: ${{ secrets.WA_DESKTOP_URL }}
         run: |
           $ErrorActionPreference = "Continue"
+          $ProgressPreference = "SilentlyContinue" # Mute indikator loading bawaan
           
-          # 1. WhatsApp Desktop (Langsung tembak ke Public Desktop)
+          Write-Host "=== Starting GUI Apps Auto-Installation ==="
+
+          # 1. WhatsApp Desktop
           if ($env:WA_URL) {
               try {
                   $waPath = "C:\Users\Public\Desktop\WhatsApp_Installer.msixbundle"
@@ -126,25 +134,29 @@ jobs:
               } catch { Write-Warning "WhatsApp gagal didownload" }
           }
           
-          # Pakai Choco untuk yang gampang
-          choco install telegram discord androidstudio brave pdf24 spotify -y --ignore-checksums
+          # 2. Pakai Choco untuk aplikasi masal (Mute spam animasi pake --no-progress)
+          Write-Host "Menginstall Telegram, Discord, AndroidStudio, Brave, PDF24, Spotify via Chocolatey..."
+          choco install telegram discord androidstudio brave pdf24 spotify -y --ignore-checksums --no-progress
 
-          # Trae Code
+          # 3. Trae Code
+          Write-Host "Menginstall Trae Code..."
           try { winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent } catch {}
           
-          # Antigravity
+          # 4. Antigravity
+          Write-Host "Menginstall Antigravity..."
           try { winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent } catch {}
 
-          # OpenCode Desktop
+          # 5. OpenCode Desktop
+          Write-Host "Menginstall OpenCode..."
           try {
-              $ProgressPreference = 'SilentlyContinue'
               $opencodeUrl = "https://opencode.ai/download/stable/windows-x64-nsis"
               $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
               Invoke-WebRequest -Uri $opencodeUrl -OutFile $opencodePath -UseBasicParsing
               Start-Process $opencodePath -ArgumentList "/S" -Wait
           } catch {}
 
-          # Canva Desktop
+          # 6. Canva Desktop
+          Write-Host "Menginstall Canva..."
           try {
               $canvaUrl = "https://desktop-release.canva.com/Canva%20Setup.exe"
               $canvaPath = Join-Path $env:TEMP "CanvaSetup.exe"
@@ -152,6 +164,7 @@ jobs:
               Start-Process $canvaPath -ArgumentList "/S" -Wait
           } catch {}
           
+          Write-Host "=== All GUI Apps Installation Completed ==="
           exit 0
 
       - name: Sync App Shortcuts & System PATH to PUBLIC
@@ -170,7 +183,7 @@ jobs:
           icacls "C:\Users\runneradmin" /grant "Users:(OI)(CI)RX" /T /q
           icacls "C:\ProgramData\npm" /grant "Users:(OI)(CI)F" /T /q
           
-          # 3. Pindah Shortcuts ke C:\Users\Public\Desktop biar otomatis kebaca sama semua user
+          # 3. Pindah Shortcuts ke C:\Users\Public\Desktop
           $publicDesktop = "C:\Users\Public\Desktop"
           $runnerDesktop = "C:\Users\runneradmin\Desktop"
           $allowedApps = @("Brave", "Canva", "Discord", "Telegram", "Spotify", "Android Studio", "Trae", "OpenCode", "PDF24", "Antigravity", "Ollama")
@@ -217,7 +230,7 @@ jobs:
           $desktopPath = "C:\Users\Public\Desktop\nelsen-dashboard"
           if ($env:GH_PAT -and $env:GH_USERNAME) {
               $authenticatedUrl = "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/nerusen/nelsen-dashboard.git"
-              git clone $authenticatedUrl $desktopPath
+              git clone -q $authenticatedUrl $desktopPath # -q mute log spam clone
               Set-Location $desktopPath
               git config user.name "$env:GH_USERNAME"
               git config user.email "$env:GH_USERNAME@users.noreply.github.com"
@@ -226,6 +239,7 @@ jobs:
 
       - name: Install Tailscale
         run: |
+          $ProgressPreference = "SilentlyContinue"
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = Join-Path $env:TEMP "tailscale.msi"
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
