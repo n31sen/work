@@ -84,46 +84,23 @@ jobs:
           }
           
           # 6. Auto-Setup JSON Scripts (Dijalankan via Public Startup)
-          # Biar pas RDP user login pertama kali, script ini otomatis bikin folder & file JSON nya di profil dia yang bener
           $startupFolder = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
           $initScriptPath = "$startupFolder\init_ai_configs.ps1"
           
-          $initScriptContent = @"
-          `$userProfile = `$env:USERPROFILE
+          # Tulis file script startup baris per baris biar aman dari error YAML
+          New-Item -ItemType File -Force -Path $initScriptPath
+          Add-Content -Path $initScriptPath -Value "`$userProfile = `$env:USERPROFILE"
+          Add-Content -Path $initScriptPath -Value "`$claudeDir = Join-Path `$userProfile '.claude'"
+          Add-Content -Path $initScriptPath -Value "if (-not (Test-Path `$claudeDir)) { New-Item -ItemType Directory -Force -Path `$claudeDir }"
+          Add-Content -Path $initScriptPath -Value "`$claudeJson = @{ env = @{ ANTHROPIC_BASE_URL = '$hardcoded9routerUrl' } }"
+          Add-Content -Path $initScriptPath -Value "`$claudeJson | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path `$claudeDir 'settings.json') -Encoding UTF8"
           
-          # Setup Claude Code Config
-          `$claudeDir = Join-Path `$userProfile ".claude"
-          if (-not (Test-Path `$claudeDir)) { New-Item -ItemType Directory -Force -Path `$claudeDir }
-          `$claudeJson = @{ env = @{ ANTHROPIC_BASE_URL = "$hardcoded9routerUrl" } }
-          `$claudeJson | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path `$claudeDir "settings.json") -Encoding UTF8
-          
-          # Setup OpenCode Configs
-          `$opencodeDirs = @(
-              (Join-Path `$userProfile ".config\opencode"),
-              (Join-Path `$userProfile ".opencode"),
-              (Join-Path `$userProfile "AppData\Roaming\opencode")
-          )
-          foreach (`$d in `$opencodeDirs) { if (-not (Test-Path `$d)) { New-Item -ItemType Directory -Force -Path `$d } }
-          
-          `$opencodeObj = @{
-              '`$schema' = "https://opencode.ai/config.json"
-              provider = @{
-                  "9router" = @{
-                      npm = "@ai-sdk/openai"
-                      name = "9router"
-                      options = @{ baseURL = "$hardcoded9routerUrl"; apiKey = "$apiKey" }
-                      models = @{ "nelsen-up" = @{ name = "nelsen-up" }; "nelsen-over" = @{ name = "nelsen-over" }; "nelsen-vibe" = @{ name = "nelsen-vibe" } }
-                  }
-              }
-              model = "9router/nelsen-up"
-          }
-          `$opencodeJsonStr = `$opencodeObj | ConvertTo-Json -Depth 10
-          foreach (`$d in `$opencodeDirs) { Set-Content -Path (Join-Path `$d "config.json") -Value `$opencodeJsonStr -Encoding UTF8 }
-          
-          # Self-destruct setelah selesai biar gak jalan berulang kali
-          Remove-Item -Path "`$PSCommandPath" -Force
-"@
-          Set-Content -Path $initScriptPath -Value $initScriptContent -Encoding UTF8
+          Add-Content -Path $initScriptPath -Value "`$opencodeDirs = @( (Join-Path `$userProfile '.config\opencode'), (Join-Path `$userProfile '.opencode'), (Join-Path `$userProfile 'AppData\Roaming\opencode') )"
+          Add-Content -Path $initScriptPath -Value "foreach (`$d in `$opencodeDirs) { if (-not (Test-Path `$d)) { New-Item -ItemType Directory -Force -Path `$d } }"
+          Add-Content -Path $initScriptPath -Value "`$opencodeObj = @{ '`$schema' = 'https://opencode.ai/config.json'; provider = @{ '9router' = @{ npm = '@ai-sdk/openai'; name = '9router'; options = @{ baseURL = '$hardcoded9routerUrl'; apiKey = '$apiKey' }; models = @{ 'nelsen-up' = @{ name = 'nelsen-up' }; 'nelsen-over' = @{ name = 'nelsen-over' }; 'nelsen-vibe' = @{ name = 'nelsen-vibe' } } } }; model = '9router/nelsen-up' }"
+          Add-Content -Path $initScriptPath -Value "`$opencodeJsonStr = `$opencodeObj | ConvertTo-Json -Depth 10"
+          Add-Content -Path $initScriptPath -Value "foreach (`$d in `$opencodeDirs) { Set-Content -Path (Join-Path `$d 'config.json') -Value `$opencodeJsonStr -Encoding UTF8 }"
+          Add-Content -Path $initScriptPath -Value "Remove-Item -Path `$PSCommandPath -Force"
           
           # Bikin shortcut biar powershell eksekusi script ini saat startup
           $wshShell = New-Object -ComObject WScript.Shell
