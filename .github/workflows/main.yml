@@ -20,7 +20,7 @@ jobs:
 
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Secure Password
+      - name: Create RDP User
         run: |
           Add-Type -AssemblyName System.Security
           $charSet = @{
@@ -40,26 +40,9 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
           
-          # Buat folder-folder profil RDP
-          $directories = @(
-              "C:\Users\RDP\Desktop",
-              "C:\Users\RDP\.claude",
-              "C:\Users\RDP\.config\opencode",
-              "C:\Users\RDP\.opencode",
-              "C:\Users\RDP\AppData\Roaming\opencode"
-          )
-          foreach ($dir in $directories) {
-              New-Item -ItemType Directory -Force -Path $dir
-          }
-          
           echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
-          
-          if (-not (Get-LocalUser -Name "RDP")) {
-              Write-Error "User creation failed"
-              exit 1
-          }
 
-      - name: Setup CLI Tools & AI Configs (Claude Code & OpenCode)
+      - name: Setup CLI Tools & Global Configs
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
@@ -69,36 +52,28 @@ jobs:
           $hardcoded9routerUrl = "https://9router.nelsen.web.id/v1"
           $apiKey = if ($env:CLAUDE_API_KEY) { $env:CLAUDE_API_KEY } else { "" }
 
-          # 1. Config Git System-Wide
-          Write-Host "[CLI 1/6] Configuring Git..."
+          # 1. Config Git
           git config --system user.name "${{ secrets.GH_USERNAME }}"
           git config --system user.email "${{ secrets.GH_USERNAME }}@users.noreply.github.com"
 
-          # 2. Configure Global NPM Path to Shared Directory
-          Write-Host "[CLI 2/6] Setting up global npm directory for all users..."
+          # 2. Config NPM Global
           New-Item -ItemType Directory -Force -Path "C:\ProgramData\npm"
           npm config set prefix "C:\ProgramData\npm" --global
 
-          # 3. Install Ollama CLI
-          Write-Host "[CLI 3/6] Installing Ollama CLI..."
+          # 3. Ollama
           try {
-              winget install --id Ollama.Ollama --scope machine --accept-source-agreements --accept-package-agreements --silent
-          } catch {
-              Write-Warning "Winget gagal, coba via direct download..."
               $ProgressPreference = 'SilentlyContinue'
               $ollamaUrl = "https://ollama.com/download/OllamaSetup.exe"
               $ollamaPath = Join-Path $env:TEMP "OllamaSetup.exe"
               Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath -UseBasicParsing
               Start-Process $ollamaPath -ArgumentList "/silent" -Wait
               Stop-Process -Name "ollama" -Force -ErrorAction SilentlyContinue
-          }
+          } catch { Write-Warning "Ollama gagal" }
 
-          # 4. Install Claude Code CLI
-          Write-Host "[CLI 4/6] Installing Claude Code CLI..."
+          # 4. Claude Code
           npm install -g @anthropic-ai/claude-code
 
-          # 5. Config Claude Code 9router Bypass
-          Write-Host "[CLI 5/6] Configuring Claude Code for 9router..."
+          # 5. Machine Level Environment Variables (Biar lgsg nempel ke RDP user)
           [Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", $hardcoded9routerUrl, "Machine")
           [Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", $hardcoded9routerUrl, "Machine")
           
@@ -107,220 +82,168 @@ jobs:
               [Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", $apiKey, "Machine")
               [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $apiKey, "Machine")
           }
-
-          $claudeObj = @{
-              env = @{
-                  ANTHROPIC_BASE_URL = $hardcoded9routerUrl
-              }
-          }
-          $claudeObj | ConvertTo-Json -Depth 5 | Set-Content -Path "C:\Users\RDP\.claude\settings.json" -Encoding UTF8
-
-          # 6. Config OpenCode JSON
-          Write-Host "[CLI 6/6] Configuring OpenCode for 9router..."
-          $opencodeObj = @{
-              '$schema' = "https://opencode.ai/config.json"
+          
+          # 6. Auto-Setup JSON Scripts (Dijalankan via Public Startup)
+          # Biar pas RDP user login pertama kali, script ini otomatis bikin folder & file JSON nya di profil dia yang bener
+          $startupFolder = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
+          $initScriptPath = "$startupFolder\init_ai_configs.ps1"
+          
+          $initScriptContent = @"
+          `$userProfile = `$env:USERPROFILE
+          
+          # Setup Claude Code Config
+          `$claudeDir = Join-Path `$userProfile ".claude"
+          if (-not (Test-Path `$claudeDir)) { New-Item -ItemType Directory -Force -Path `$claudeDir }
+          `$claudeJson = @{ env = @{ ANTHROPIC_BASE_URL = "$hardcoded9routerUrl" } }
+          `$claudeJson | ConvertTo-Json -Depth 5 | Set-Content -Path (Join-Path `$claudeDir "settings.json") -Encoding UTF8
+          
+          # Setup OpenCode Configs
+          `$opencodeDirs = @(
+              (Join-Path `$userProfile ".config\opencode"),
+              (Join-Path `$userProfile ".opencode"),
+              (Join-Path `$userProfile "AppData\Roaming\opencode")
+          )
+          foreach (`$d in `$opencodeDirs) { if (-not (Test-Path `$d)) { New-Item -ItemType Directory -Force -Path `$d } }
+          
+          `$opencodeObj = @{
+              '`$schema' = "https://opencode.ai/config.json"
               provider = @{
                   "9router" = @{
                       npm = "@ai-sdk/openai"
                       name = "9router"
-                      options = @{
-                          baseURL = $hardcoded9routerUrl
-                          apiKey = $apiKey
-                      }
-                      models = @{
-                          "nelsen-up" = @{ name = "nelsen-up" }
-                          "nelsen-over" = @{ name = "nelsen-over" }
-                          "nelsen-vibe" = @{ name = "nelsen-vibe" }
-                      }
+                      options = @{ baseURL = "$hardcoded9routerUrl"; apiKey = "$apiKey" }
+                      models = @{ "nelsen-up" = @{ name = "nelsen-up" }; "nelsen-over" = @{ name = "nelsen-over" }; "nelsen-vibe" = @{ name = "nelsen-vibe" } }
                   }
               }
               model = "9router/nelsen-up"
           }
-          $opencodeJsonStr = $opencodeObj | ConvertTo-Json -Depth 10
-          $opencodeConfigPaths = @(
-              "C:\Users\RDP\.config\opencode\opencode.json",
-              "C:\Users\RDP\.opencode\config.json",
-              "C:\Users\RDP\AppData\Roaming\opencode\config.json"
-          )
-          foreach ($p in $opencodeConfigPaths) {
-              Set-Content -Path $p -Value $opencodeJsonStr -Encoding UTF8
-          }
+          `$opencodeJsonStr = `$opencodeObj | ConvertTo-Json -Depth 10
+          foreach (`$d in `$opencodeDirs) { Set-Content -Path (Join-Path `$d "config.json") -Value `$opencodeJsonStr -Encoding UTF8 }
+          
+          # Self-destruct setelah selesai biar gak jalan berulang kali
+          Remove-Item -Path "`$PSCommandPath" -Force
+"@
+          Set-Content -Path $initScriptPath -Value $initScriptContent -Encoding UTF8
+          
+          # Bikin shortcut biar powershell eksekusi script ini saat startup
+          $wshShell = New-Object -ComObject WScript.Shell
+          $shortcut = $wshShell.CreateShortcut("$startupFolder\InitAIConfigs.lnk")
+          $shortcut.TargetPath = "powershell.exe"
+          $shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$initScriptPath`""
+          $shortcut.Save()
 
-          Write-Host "Claude Code & OpenCode configs applied successfully!"
+          Write-Host "System Tools & AI Configs prepared successfully!"
           exit 0
 
-      - name: Auto Install GUI Apps (WhatsApp, Telegram, Discord, dll)
+      - name: Auto Install GUI Apps
         env:
           WA_URL: ${{ secrets.WA_DESKTOP_URL }}
         run: |
           $ErrorActionPreference = "Continue"
-          Write-Host "=== Starting GUI Apps Auto-Installation ==="
-
-          # 1. WhatsApp Desktop (Langsung tembak ke Desktop RDP)
-          Write-Host "[1/11] Installing WhatsApp Desktop..."
+          
+          # 1. WhatsApp Desktop (Langsung tembak ke Public Desktop)
           if ($env:WA_URL) {
               try {
-                  $waPath = "C:\Users\RDP\Desktop\WhatsApp_Installer.msixbundle"
+                  $waPath = "C:\Users\Public\Desktop\WhatsApp_Installer.msixbundle"
                   Invoke-WebRequest -Uri $env:WA_URL -OutFile $waPath -UseBasicParsing
-                  Write-Host "File Installer WA berhasil ditaruh di Desktop!"
-                  Add-AppxPackage -Path $waPath
-                  Write-Host "WhatsApp Desktop auto-install attempted!"
-              } catch { 
-                  Write-Warning "Auto-install WA ditolak Windows. Silakan double-click file WhatsApp di Desktop saat login RDP!" 
-              }
-          } else { Write-Host "Secret WA_DESKTOP_URL kosong, skip WhatsApp..." }
+              } catch { Write-Warning "WhatsApp gagal didownload" }
+          }
+          
+          # Pakai Choco untuk yang gampang
+          choco install telegram discord androidstudio brave pdf24 spotify -y --ignore-checksums
 
-          # 2. Telegram Desktop
-          Write-Host "[2/11] Installing Telegram..."
-          choco install telegram -y --ignore-checksums
+          # Trae Code
+          try { winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent } catch {}
+          
+          # Antigravity
+          try { winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent } catch {}
 
-          # 3. Discord Desktop
-          Write-Host "[3/11] Installing Discord..."
-          choco install discord -y --ignore-checksums
-
-          # 4. Trae Code Desktop
-          Write-Host "[4/11] Installing Trae Code..."
-          try {
-              winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Warning "Trae Code gagal via winget. $_" }
-
-          # 5. OpenCode Desktop
-          Write-Host "[5/11] Installing OpenCode Desktop..."
+          # OpenCode Desktop
           try {
               $ProgressPreference = 'SilentlyContinue'
               $opencodeUrl = "https://opencode.ai/download/stable/windows-x64-nsis"
               $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
               Invoke-WebRequest -Uri $opencodeUrl -OutFile $opencodePath -UseBasicParsing
               Start-Process $opencodePath -ArgumentList "/S" -Wait
-          } catch { Write-Warning "OpenCode gagal: $_" }
+          } catch {}
 
-          # 6. Android Studio
-          Write-Host "[6/11] Installing Android Studio..."
-          choco install androidstudio -y --ignore-checksums
-
-          # 7. Brave Browser
-          Write-Host "[7/11] Installing Brave..."
-          choco install brave -y --ignore-checksums
-
-          # 8. Antigravity
-          Write-Host "[8/11] Installing Antigravity..."
-          try {
-              winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Warning "Antigravity gagal via winget. $_" }
-
-          # 9. PDF Office / PDF24
-          Write-Host "[9/11] Installing PDF24..."
-          choco install pdf24 -y --ignore-checksums
-
-          # 10. Spotify Desktop
-          Write-Host "[10/11] Installing Spotify..."
-          choco install spotify -y --ignore-checksums
-
-          # 11. Canva Desktop
-          Write-Host "[11/11] Installing Canva..."
+          # Canva Desktop
           try {
               $canvaUrl = "https://desktop-release.canva.com/Canva%20Setup.exe"
               $canvaPath = Join-Path $env:TEMP "CanvaSetup.exe"
               Invoke-WebRequest -Uri $canvaUrl -OutFile $canvaPath -UseBasicParsing
               Start-Process $canvaPath -ArgumentList "/S" -Wait
-              Write-Host "Canva Desktop installed successfully!"
-          } catch { Write-Warning "Canva gagal: $_" }
-
-          Write-Host "=== All GUI Apps Installation Completed ==="
+          } catch {}
           
-          # Hack Anti-Gagal: Memaksa exit code 0 biar workflow tetep jalan mulus!
           exit 0
 
-      - name: Sync App Shortcuts, System PATH & Permissions
+      - name: Sync App Shortcuts & System PATH to PUBLIC
         run: |
-          Write-Host "=== Registering System PATH Registry & Syncing Shortcuts ==="
-          
-          # 1. Update Registry System PATH (HKLM)
+          # 1. Update Registry System PATH
           $sysEnvRegistry = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
           $currentPath = (Get-ItemProperty -Path $sysEnvRegistry).Path
           $pathsToAdd = @(
-              "C:\ProgramData\npm",
-              "C:\Program Files\nodejs",
-              "C:\Program Files\Git\cmd",
-              "C:\Program Files\Git\bin",
-              "C:\Program Files\Ollama",
-              "C:\Users\runneradmin\AppData\Local\Programs\Ollama",
-              "C:\Users\runneradmin\AppData\Roaming\npm",
-              "C:\Users\RDP\AppData\Roaming\npm"
+              "C:\ProgramData\npm", "C:\Program Files\nodejs", "C:\Program Files\Git\cmd", "C:\Program Files\Git\bin",
+              "C:\Program Files\Ollama", "C:\Users\runneradmin\AppData\Local\Programs\Ollama", "C:\Users\runneradmin\AppData\Roaming\npm"
           )
-
-          foreach ($p in $pathsToAdd) {
-              if ($currentPath -notlike "*$p*") {
-                  $currentPath = "$currentPath;$p"
-              }
-          }
+          foreach ($p in $pathsToAdd) { if ($currentPath -notlike "*$p*") { $currentPath = "$currentPath;$p" } }
           Set-ItemProperty -Path $sysEnvRegistry -Name "Path" -Value $currentPath
 
-          # 2. Buka permission folder
-          icacls "C:\Users\runneradmin" /grant "RDP:(OI)(CI)F" /T /q
-          icacls "C:\ProgramData\npm" /grant "RDP:(OI)(CI)F" /T /q
-          icacls "C:\Users\RDP" /grant "RDP:(OI)(CI)F" /T /q
+          # 2. Fix Permissions
+          icacls "C:\Users\runneradmin" /grant "Users:(OI)(CI)RX" /T /q
+          icacls "C:\ProgramData\npm" /grant "Users:(OI)(CI)F" /T /q
           
-          # 3. Copy ONLY whitelisted shortcuts ke RDP Desktop
-          $rdpDesktop = "C:\Users\RDP\Desktop"
+          # 3. Pindah Shortcuts ke C:\Users\Public\Desktop biar otomatis kebaca sama semua user
+          $publicDesktop = "C:\Users\Public\Desktop"
           $runnerDesktop = "C:\Users\runneradmin\Desktop"
-          
           $allowedApps = @("Brave", "Canva", "Discord", "Telegram", "Spotify", "Android Studio", "Trae", "OpenCode", "PDF24", "Antigravity", "Ollama")
           
+          # Dari Runner Desktop ke Public
           if (Test-Path $runnerDesktop) {
               $allShortcuts = Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
               foreach ($shortcut in $allShortcuts) {
                   foreach ($app in $allowedApps) {
                       if ($shortcut.Name -match $app) {
-                          Copy-Item -Path $shortcut.FullName -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+                          Copy-Item -Path $shortcut.FullName -Destination $publicDesktop -Force -ErrorAction SilentlyContinue
                           break
                       }
                   }
               }
           }
           
+          # Dari Start Menu ke Public
           $startMenuPaths = @(
               "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs",
               "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
           )
-          
           foreach ($path in $startMenuPaths) {
               if (Test-Path $path) {
                   $allStartMenuShortcuts = Get-ChildItem -Path $path -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
                   foreach ($shortcut in $allStartMenuShortcuts) {
                       foreach ($app in $allowedApps) {
                           if ($shortcut.Name -match $app) {
-                              Copy-Item -Path $shortcut.FullName -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+                              Copy-Item -Path $shortcut.FullName -Destination $publicDesktop -Force -ErrorAction SilentlyContinue
                               break
                           }
                       }
                   }
               }
           }
-          
-          Write-Host "System PATH Registry & Cleaned Shortcuts successfully updated for RDP User!"
           exit 0
 
-      - name: Auto Clone Private Repository
+      - name: Auto Clone Private Repository ke PUBLIC Desktop
         env:
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          Write-Host "=== Auto Cloning Private Repo ==="
-          $desktopPath = "C:\Users\RDP\Desktop\nelsen-dashboard"
-          
+          # Ditaruh di Public Desktop biar langsung muncul di user manapun
+          $desktopPath = "C:\Users\Public\Desktop\nelsen-dashboard"
           if ($env:GH_PAT -and $env:GH_USERNAME) {
               $authenticatedUrl = "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/nerusen/nelsen-dashboard.git"
-              
               git clone $authenticatedUrl $desktopPath
-              
               Set-Location $desktopPath
               git config user.name "$env:GH_USERNAME"
               git config user.email "$env:GH_USERNAME@users.noreply.github.com"
-              
-              Write-Host "Repo 'nelsen-dashboard' berhasil di-clone!"
-          } else {
-              Write-Warning "Secret GH_PAT atau GH_USERNAME belum diisi! Skip cloning."
           }
           exit 0
 
@@ -328,16 +251,13 @@ jobs:
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
           $installerPath = Join-Path $env:TEMP "tailscale.msi"
-          
           Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
           Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
 
       - name: Establish Tailscale Connection
         run: |
           $tsExe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
           & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-          
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
@@ -345,23 +265,13 @@ jobs:
               Start-Sleep -Seconds 5
               $retries++
           }
-          
-          if (-not $tsIP) {
-              Write-Error "Tailscale IP not assigned. Exiting."
-              exit 1
-          }
+          if (-not $tsIP) { exit 1 }
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
       
       - name: Verify RDP Accessibility
         run: |
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
-          if (-not $testResult.TcpTestSucceeded) {
-              Write-Error "TCP connection to RDP port 3389 failed"
-              exit 1
-          }
-          Write-Host "TCP connectivity successful!"
+          if (-not $testResult.TcpTestSucceeded) { exit 1 }
 
       - name: Maintain Connection
         run: |
@@ -369,11 +279,6 @@ jobs:
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: RDP"
           Write-Host "Password: $(echo $env:RDP_CREDS)"
-          Write-Host "Cloned Repo: C:\Users\RDP\Desktop\nelsen-dashboard"
           Write-Host "==================`n"
-          
-          while ($true) {
-              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
-              Start-Sleep -Seconds 300
-          }
+          while ($true) { Start-Sleep -Seconds 300 }
           
