@@ -40,6 +40,18 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
           
+          # Buat folder-folder profil RDP secara eksplisit
+          $directories = @(
+              "C:\Users\RDP\Desktop",
+              "C:\Users\RDP\.claude",
+              "C:\Users\RDP\.config\opencode",
+              "C:\Users\RDP\.opencode",
+              "C:\Users\RDP\AppData\Roaming\opencode"
+          )
+          foreach ($dir in $directories) {
+              New-Item -ItemType Directory -Force -Path $dir
+          }
+          
           echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
           
           if (-not (Get-LocalUser -Name "RDP")) {
@@ -47,48 +59,128 @@ jobs:
               exit 1
           }
 
-      - name: Setup CLI Tools (Git, Node, Ollama, Claude Code)
+      - name: Setup CLI Tools & AI Configs (Claude Code & OpenCode 9router)
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
           $ErrorActionPreference = "Continue"
-          Write-Host "=== Setting up CLI Tools ==="
+          Write-Host "=== Setting up CLI Tools & AI Configs ==="
 
-          # 1. Config Git (Git & Node.js / npm sudah bawaan runner)
-          Write-Host "[CLI 1/4] Configuring Git..."
-          git config --global user.name "${{ secrets.GH_USERNAME }}"
-          git config --global user.email "${{ secrets.GH_USERNAME }}@users.noreply.github.com"
+          $hardcoded9routerUrl = "https://9router.nelsen.web.id/v1"
+          $apiKey = if ($env:CLAUDE_API_KEY) { $env:CLAUDE_API_KEY } else { "" }
 
-          # 2. Verify npm
-          Write-Host "[CLI 2/4] Verifying Node.js & npm..."
-          npm -v
+          # 1. Config Git System-Wide
+          Write-Host "[CLI 1/6] Configuring Git..."
+          git config --system user.name "${{ secrets.GH_USERNAME }}"
+          git config --system user.email "${{ secrets.GH_USERNAME }}@users.noreply.github.com"
+
+          # 2. Configure Global NPM Path to Shared Directory
+          Write-Host "[CLI 2/6] Setting up global npm directory for all users..."
+          New-Item -ItemType Directory -Force -Path "C:\ProgramData\npm"
+          npm config set prefix "C:\ProgramData\npm" --global
 
           # 3. Install Ollama CLI
-          Write-Host "[CLI 3/4] Installing Ollama CLI..."
+          Write-Host "[CLI 3/6] Installing Ollama CLI..."
           try {
-              winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id Ollama.Ollama --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch {
               $ollamaUrl = "https://ollama.com/download/OllamaSetup.exe"
               $ollamaPath = Join-Path $env:TEMP "OllamaSetup.exe"
-              Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath
+              Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath -UseBasicParsing
               Start-Process $ollamaPath -ArgumentList "/silent" -Wait
           }
 
           # 4. Install Claude Code CLI
-          Write-Host "[CLI 4/4] Installing Claude Code CLI..."
+          Write-Host "[CLI 4/6] Installing Claude Code CLI..."
           npm install -g @anthropic-ai/claude-code
 
-      - name: Auto Install 10 GUI Apps
+          # 5. Config Claude Code 9router Bypass
+          Write-Host "[CLI 5/6] Configuring Claude Code for 9router..."
+          [Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", $hardcoded9routerUrl, "Machine")
+          [Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", $hardcoded9routerUrl, "Machine")
+          
+          if ($apiKey) {
+              [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", $apiKey, "Machine")
+              [Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", $apiKey, "Machine")
+              [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $apiKey, "Machine")
+          }
+
+          $claudeJson = @"
+          {
+            "env": {
+              "ANTHROPIC_BASE_URL": "$hardcoded9routerUrl"
+            }
+          }
+"@
+          Set-Content -Path "C:\Users\RDP\.claude\settings.json" -Value $claudeJson -Encoding UTF8
+
+          # 6. Config OpenCode JSON (9router + Models: nelsen-up, nelsen-over, nelsen-vibe)
+          Write-Host "[CLI 6/6] Configuring OpenCode for 9router..."
+          $opencodeJson = @"
+          {
+            "`$schema": "https://opencode.ai/config.json",
+            "provider": {
+              "9router": {
+                "npm": "@ai-sdk/openai",
+                "name": "9router",
+                "options": {
+                  "baseURL": "$hardcoded9routerUrl",
+                  "apiKey": "$apiKey"
+                },
+                "models": {
+                  "nelsen-up": { "name": "nelsen-up" },
+                  "nelsen-over": { "name": "nelsen-over" },
+                  "nelsen-vibe": { "name": "nelsen-vibe" }
+                }
+              }
+            },
+            "model": "9router/nelsen-up"
+          }
+"@
+          $opencodeConfigPaths = @(
+              "C:\Users\RDP\.config\opencode\opencode.json",
+              "C:\Users\RDP\.opencode\config.json",
+              "C:\Users\RDP\AppData\Roaming\opencode\config.json"
+          )
+          foreach ($p in $opencodeConfigPaths) {
+              Set-Content -Path $p -Value $opencodeJson -Encoding UTF8
+          }
+
+          Write-Host "Claude Code & OpenCode 9router configs applied successfully!"
+
+      - name: Auto Install GUI Apps (WhatsApp, Telegram, Discord, etc.)
+        env:
+          WA_URL: ${{ secrets.WA_DESKTOP_URL }}
         run: |
           $ErrorActionPreference = "Continue"
           Write-Host "=== Starting GUI Apps Auto-Installation ==="
 
-          # 1. WhatsApp Desktop
-          Write-Host "[1/10] Installing WhatsApp..."
+          # 1. WhatsApp Desktop (.msixbundle via Secret Variable)
+          Write-Host "[1/11] Installing WhatsApp Desktop..."
           try {
-              winget install --id WhatsApp.WhatsApp --source msstore -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "WhatsApp winget skip, silakan install PWA via Edge jika butuh." }
+              if ($env:WA_URL) {
+                  $waPath = Join-Path $env:TEMP "whatsapp.msixbundle"
+                  Invoke-WebRequest -Uri $env:WA_URL -OutFile $waPath -UseBasicParsing
+                  Add-AppxPackage -Path $waPath -AllUsers
+                  Remove-Item $waPath -Force -ErrorAction SilentlyContinue
+                  Write-Host "WhatsApp Desktop installed successfully!"
+              } else {
+                  Write-Host "Secret WA_DESKTOP_URL belum diisi, skip WhatsApp..."
+              }
+          } catch { Write-Host "Link WhatsApp error/expired, skip..." }
 
-          # 2. Discord Desktop
-          Write-Host "[2/10] Installing Discord..."
+          # 2. Telegram Desktop
+          Write-Host "[2/11] Installing Telegram Desktop..."
+          try {
+              $tgUrl = "https://telegram.org/dl/desktop/win64"
+              $tgPath = Join-Path $env:TEMP "tsetup.exe"
+              Invoke-WebRequest -Uri $tgUrl -OutFile $tgPath -UseBasicParsing
+              Start-Process $tgPath -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
+              Remove-Item $tgPath -Force -ErrorAction SilentlyContinue
+          } catch { Write-Host "Telegram install error, skipping..." }
+
+          # 3. Discord Desktop
+          Write-Host "[3/11] Installing Discord..."
           try {
               $discordUrl = "https://discord.com/api/download?platform=win"
               $discordPath = Join-Path $env:TEMP "DiscordSetup.exe"
@@ -97,14 +189,14 @@ jobs:
               Remove-Item $discordPath -Force -ErrorAction SilentlyContinue
           } catch { Write-Host "Discord install error, skipping..." }
 
-          # 3. Trae Code Desktop x64
-          Write-Host "[3/10] Installing Trae Code..."
+          # 4. Trae Code Desktop x64
+          Write-Host "[4/11] Installing Trae Code..."
           try {
-              winget install --id ByteDance.Trae -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id ByteDance.Trae --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "Trae install error, skipping..." }
 
-          # 4. OpenCode Desktop
-          Write-Host "[4/10] Installing OpenCode Desktop..."
+          # 5. OpenCode Desktop
+          Write-Host "[5/11] Installing OpenCode Desktop..."
           try {
               $opencodeUrl = "https://opencode.ai/download/stable/windows-x64-nsis"
               $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
@@ -113,43 +205,96 @@ jobs:
               Remove-Item $opencodePath -Force -ErrorAction SilentlyContinue
           } catch { Write-Host "OpenCode install error, skipping..." }
 
-          # 5. Android Studio Desktop
-          Write-Host "[5/10] Installing Android Studio..."
+          # 6. Android Studio Desktop
+          Write-Host "[6/11] Installing Android Studio..."
           try {
-              winget install --id Google.AndroidStudio -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id Google.AndroidStudio --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "Android Studio install error, skipping..." }
 
-          # 6. Brave Browser Desktop
-          Write-Host "[6/10] Installing Brave Browser..."
+          # 7. Brave Browser Desktop
+          Write-Host "[7/11] Installing Brave Browser..."
           try {
-              winget install --id Brave.Brave -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id Brave.Brave --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "Brave install error, skipping..." }
 
-          # 7. Antigravity Desktop
-          Write-Host "[7/10] Installing Google Antigravity..."
+          # 8. Antigravity Desktop
+          Write-Host "[8/11] Installing Google Antigravity..."
           try {
-              winget install --id Google.Antigravity -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id Google.Antigravity --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "Antigravity install error, skipping..." }
 
-          # 8. PDF Office Desktop (PDF24 Creator)
-          Write-Host "[8/10] Installing PDF Office..."
+          # 9. PDF Office Desktop (PDF24)
+          Write-Host "[9/11] Installing PDF Office..."
           try {
-              winget install --id PDF24.PDF24Creator -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id PDF24.PDF24Creator --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "PDF Office install error, skipping..." }
 
-          # 9. Spotify Desktop
-          Write-Host "[9/10] Installing Spotify..."
+          # 10. Spotify Desktop
+          Write-Host "[10/11] Installing Spotify..."
           try {
-              winget install --id Spotify.Spotify -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id Spotify.Spotify --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "Spotify install error, skipping..." }
 
-          # 10. Canva Desktop
-          Write-Host "[10/10] Installing Canva..."
+          # 11. Canva Desktop
+          Write-Host "[11/11] Installing Canva..."
           try {
-              winget install --id Canva.Canva -e --accept-source-agreements --accept-package-agreements --silent
+              winget install --id Canva.Canva --scope machine -e --accept-source-agreements --accept-package-agreements --silent
           } catch { Write-Host "Canva install error, skipping..." }
 
-          Write-Host "=== All GUI Apps Installation Step Completed ==="
+          Write-Host "=== All GUI Apps Installation Completed ==="
+
+      - name: Sync App Shortcuts, System PATH & Permissions
+        run: |
+          Write-Host "=== Registering System PATH Registry & Syncing Shortcuts ==="
+          
+          # 1. Update Registry System PATH (HKLM) biar RDP User dapet akses instan ke semua CLI
+          $sysEnvRegistry = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
+          $currentPath = (Get-ItemProperty -Path $sysEnvRegistry).Path
+          $pathsToAdd = @(
+              "C:\ProgramData\npm",
+              "C:\Program Files\nodejs",
+              "C:\Program Files\Git\cmd",
+              "C:\Program Files\Git\bin",
+              "C:\Program Files\Ollama",
+              "C:\Users\runneradmin\AppData\Local\Programs\Ollama",
+              "C:\Users\runneradmin\AppData\Roaming\npm",
+              "C:\Users\RDP\AppData\Roaming\npm"
+          )
+
+          foreach ($p in $pathsToAdd) {
+              if ($currentPath -notlike "*$p*") {
+                  $currentPath = "$currentPath;$p"
+              }
+          }
+          Set-ItemProperty -Path $sysEnvRegistry -Name "Path" -Value $currentPath
+
+          # 2. Buka permission folder runneradmin, ProgramData & RDP
+          icacls "C:\Users\runneradmin" /grant "RDP:(OI)(CI)F" /T /q
+          icacls "C:\ProgramData\npm" /grant "RDP:(OI)(CI)F" /T /q
+          icacls "C:\Users\RDP" /grant "RDP:(OI)(CI)F" /T /q
+          
+          # 3. Copy semua shortcut (.lnk & .url) dari runneradmin Desktop & Start Menu ke RDP Desktop
+          $rdpDesktop = "C:\Users\RDP\Desktop"
+          $publicDesktop = "C:\Users\Public\Desktop"
+          $runnerDesktop = "C:\Users\runneradmin\Desktop"
+          
+          if (Test-Path $runnerDesktop) {
+              Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue | Copy-Item -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+          }
+          
+          $startMenuPaths = @(
+              "C:\Users\runneradmin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs",
+              "C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+          )
+          
+          foreach ($path in $startMenuPaths) {
+              if (Test-Path $path) {
+                  Get-ChildItem -Path $path -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue | Copy-Item -Destination $rdpDesktop -Force -ErrorAction SilentlyContinue
+                  Get-ChildItem -Path $path -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue | Copy-Item -Destination $publicDesktop -Force -ErrorAction SilentlyContinue
+              }
+          }
+          
+          Write-Host "System PATH Registry & Shortcuts successfully updated for RDP User!"
 
       - name: Auto Clone Private Repository
         env:
@@ -164,12 +309,11 @@ jobs:
               
               git clone $authenticatedUrl $desktopPath
               
-              # Set credential helper di dalam repo folder biar bisa git commit/push tanpa masukin password lagi
               Set-Location $desktopPath
               git config user.name "$env:GH_USERNAME"
               git config user.email "$env:GH_USERNAME@users.noreply.github.com"
               
-              Write-Host "Repo 'nelsen-dashboard' berhasil di-clone di Desktop!"
+              Write-Host "Repo 'nelsen-dashboard' berhasil di-clone di Desktop RDP!"
           } else {
               Write-Warning "Secret GH_PAT atau GH_USERNAME belum diisi! Skip cloning."
           }
