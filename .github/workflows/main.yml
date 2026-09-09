@@ -40,7 +40,7 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
           
-          # Buat folder-folder profil RDP secara eksplisit
+          # Buat folder-folder profil RDP
           $directories = @(
               "C:\Users\RDP\Desktop",
               "C:\Users\RDP\.claude",
@@ -105,45 +105,42 @@ jobs:
               [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $apiKey, "Machine")
           }
 
-          $claudeJson = @"
-          {
-            "env": {
-              "ANTHROPIC_BASE_URL": "$hardcoded9routerUrl"
-            }
+          $claudeObj = @{
+              env = @{
+                  ANTHROPIC_BASE_URL = $hardcoded9routerUrl
+              }
           }
-"@
-          Set-Content -Path "C:\Users\RDP\.claude\settings.json" -Value $claudeJson -Encoding UTF8
+          $claudeObj | ConvertTo-Json -Depth 5 | Set-Content -Path "C:\Users\RDP\.claude\settings.json" -Encoding UTF8
 
           # 6. Config OpenCode JSON (9router + Models: nelsen-up, nelsen-over, nelsen-vibe)
           Write-Host "[CLI 6/6] Configuring OpenCode for 9router..."
-          $opencodeJson = @"
-          {
-            "`$schema": "https://opencode.ai/config.json",
-            "provider": {
-              "9router": {
-                "npm": "@ai-sdk/openai",
-                "name": "9router",
-                "options": {
-                  "baseURL": "$hardcoded9routerUrl",
-                  "apiKey": "$apiKey"
-                },
-                "models": {
-                  "nelsen-up": { "name": "nelsen-up" },
-                  "nelsen-over": { "name": "nelsen-over" },
-                  "nelsen-vibe": { "name": "nelsen-vibe" }
-                }
+          $opencodeObj = @{
+              '$schema' = "https://opencode.ai/config.json"
+              provider = @{
+                  "9router" = @{
+                      npm = "@ai-sdk/openai"
+                      name = "9router"
+                      options = @{
+                          baseURL = $hardcoded9routerUrl
+                          apiKey = $apiKey
+                      }
+                      models = @{
+                          "nelsen-up" = @{ name = "nelsen-up" }
+                          "nelsen-over" = @{ name = "nelsen-over" }
+                          "nelsen-vibe" = @{ name = "nelsen-vibe" }
+                      }
+                  }
               }
-            },
-            "model": "9router/nelsen-up"
+              model = "9router/nelsen-up"
           }
-"@
+          $opencodeJsonStr = $opencodeObj | ConvertTo-Json -Depth 10
           $opencodeConfigPaths = @(
               "C:\Users\RDP\.config\opencode\opencode.json",
               "C:\Users\RDP\.opencode\config.json",
               "C:\Users\RDP\AppData\Roaming\opencode\config.json"
           )
           foreach ($p in $opencodeConfigPaths) {
-              Set-Content -Path $p -Value $opencodeJson -Encoding UTF8
+              Set-Content -Path $p -Value $opencodeJsonStr -Encoding UTF8
           }
 
           Write-Host "Claude Code & OpenCode 9router configs applied successfully!"
@@ -247,7 +244,7 @@ jobs:
         run: |
           Write-Host "=== Registering System PATH Registry & Syncing Shortcuts ==="
           
-          # 1. Update Registry System PATH (HKLM) biar RDP User dapet akses instan ke semua CLI
+          # 1. Update Registry System PATH (HKLM)
           $sysEnvRegistry = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
           $currentPath = (Get-ItemProperty -Path $sysEnvRegistry).Path
           $pathsToAdd = @(
@@ -273,7 +270,7 @@ jobs:
           icacls "C:\ProgramData\npm" /grant "RDP:(OI)(CI)F" /T /q
           icacls "C:\Users\RDP" /grant "RDP:(OI)(CI)F" /T /q
           
-          # 3. Copy semua shortcut (.lnk & .url) dari runneradmin Desktop & Start Menu ke RDP Desktop
+          # 3. Copy semua shortcut (.lnk & .url)
           $rdpDesktop = "C:\Users\RDP\Desktop"
           $publicDesktop = "C:\Users\Public\Desktop"
           $runnerDesktop = "C:\Users\runneradmin\Desktop"
