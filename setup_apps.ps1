@@ -75,21 +75,12 @@ try {
 Write-Host "`n=== Memulai Instalasi Aplikasi GUI (Skip jika gagal) ==="
 
 # 7. WHATSAPP DESKTOP
-if ($env:WA_URL) {
-    try {
-        # Amankan installer ke Public Desktop buat jaga-jaga
-        $waPath = "C:\Users\Public\Desktop\Install_WhatsApp.msixbundle"
-        Invoke-WebRequest -Uri $env:WA_URL -OutFile $waPath -UseBasicParsing
-        Write-Host "[v] WA didownload ke Desktop."
-        
-        # Coba auto install (tanpa parameter AllUsers)
-        Add-AppxPackage -Path $waPath -ErrorAction Stop
-        Write-Host "[v] WhatsApp sukses terinstall otomatis!"
-        Remove-Item $waPath -Force -ErrorAction SilentlyContinue # Hapus installer jika sukses
-    } catch { 
-        Write-Warning "Auto-install WA ditolak. File installer aman di Desktop, klik 2x buat install manual pas login!" 
-    }
-} else { Write-Host "[-] URL WA Kosong, skip." }
+try { 
+    Write-Host "[>] Menginstall WhatsApp Desktop..."
+    winget install --id WhatsApp.WhatsApp --source winget --accept-source-agreements --accept-package-agreements --silent 
+    Write-Host "[v] WhatsApp sukses"
+} catch { Write-Warning "WhatsApp gagal di-install." }
+
 
 # 8. MASS INSTALL VIA CHOCO (Telegram, Discord, Android Studio, Brave, PDF24, Spotify)
 try {
