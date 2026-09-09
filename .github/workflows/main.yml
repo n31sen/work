@@ -1,0 +1,229 @@
+name: RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: Configure Core RDP Settings
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User with Secure Password
+        run: |
+          Add-Type -AssemblyName System.Security
+          $charSet = @{
+              Upper   = [char[]](65..90)
+              Lower   = [char[]](97..122)
+              Number  = [char[]](48..57)
+              Special = ([char[]](33..47) + [char[]](58..64) + [char[]](91..96) + [char[]](123..126))
+          }
+          $rawPassword = @()
+          $rawPassword += $charSet.Upper | Get-Random -Count 4
+          $rawPassword += $charSet.Lower | Get-Random -Count 4
+          $rawPassword += $charSet.Number | Get-Random -Count 4
+          $rawPassword += $charSet.Special | Get-Random -Count 4
+          $password = -join ($rawPassword | Sort-Object { Get-Random })
+          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          
+          echo "RDP_CREDS=User: RDP | Password: $password" >> $env:GITHUB_ENV
+          
+          if (-not (Get-LocalUser -Name "RDP")) {
+              Write-Error "User creation failed"
+              exit 1
+          }
+
+      - name: Setup CLI Tools (Git, Node, Ollama, Claude Code)
+        run: |
+          $ErrorActionPreference = "Continue"
+          Write-Host "=== Setting up CLI Tools ==="
+
+          # 1. Config Git (Git & Node.js / npm sudah bawaan runner)
+          Write-Host "[CLI 1/4] Configuring Git..."
+          git config --global user.name "${{ secrets.GH_USERNAME }}"
+          git config --global user.email "${{ secrets.GH_USERNAME }}@users.noreply.github.com"
+
+          # 2. Verify npm
+          Write-Host "[CLI 2/4] Verifying Node.js & npm..."
+          npm -v
+
+          # 3. Install Ollama CLI
+          Write-Host "[CLI 3/4] Installing Ollama CLI..."
+          try {
+              winget install --id Ollama.Ollama -e --accept-source-agreements --accept-package-agreements --silent
+          } catch {
+              $ollamaUrl = "https://ollama.com/download/OllamaSetup.exe"
+              $ollamaPath = Join-Path $env:TEMP "OllamaSetup.exe"
+              Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath
+              Start-Process $ollamaPath -ArgumentList "/silent" -Wait
+          }
+
+          # 4. Install Claude Code CLI
+          Write-Host "[CLI 4/4] Installing Claude Code CLI..."
+          npm install -g @anthropic-ai/claude-code
+
+      - name: Auto Install 10 GUI Apps
+        run: |
+          $ErrorActionPreference = "Continue"
+          Write-Host "=== Starting GUI Apps Auto-Installation ==="
+
+          # 1. WhatsApp Desktop
+          Write-Host "[1/10] Installing WhatsApp..."
+          try {
+              winget install --id WhatsApp.WhatsApp --source msstore -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "WhatsApp winget skip, silakan install PWA via Edge jika butuh." }
+
+          # 2. Discord Desktop
+          Write-Host "[2/10] Installing Discord..."
+          try {
+              $discordUrl = "https://discord.com/api/download?platform=win"
+              $discordPath = Join-Path $env:TEMP "DiscordSetup.exe"
+              Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath -UseBasicParsing
+              Start-Process $discordPath -ArgumentList "/s" -Wait
+              Remove-Item $discordPath -Force -ErrorAction SilentlyContinue
+          } catch { Write-Host "Discord install error, skipping..." }
+
+          # 3. Trae Code Desktop x64
+          Write-Host "[3/10] Installing Trae Code..."
+          try {
+              winget install --id ByteDance.Trae -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "Trae install error, skipping..." }
+
+          # 4. OpenCode Desktop
+          Write-Host "[4/10] Installing OpenCode Desktop..."
+          try {
+              $opencodeUrl = "https://opencode.ai/download/stable/windows-x64-nsis"
+              $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
+              Invoke-WebRequest -Uri $opencodeUrl -OutFile $opencodePath -UseBasicParsing
+              Start-Process $opencodePath -ArgumentList "/S" -Wait
+              Remove-Item $opencodePath -Force -ErrorAction SilentlyContinue
+          } catch { Write-Host "OpenCode install error, skipping..." }
+
+          # 5. Android Studio Desktop
+          Write-Host "[5/10] Installing Android Studio..."
+          try {
+              winget install --id Google.AndroidStudio -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "Android Studio install error, skipping..." }
+
+          # 6. Brave Browser Desktop
+          Write-Host "[6/10] Installing Brave Browser..."
+          try {
+              winget install --id Brave.Brave -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "Brave install error, skipping..." }
+
+          # 7. Antigravity Desktop
+          Write-Host "[7/10] Installing Google Antigravity..."
+          try {
+              winget install --id Google.Antigravity -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "Antigravity install error, skipping..." }
+
+          # 8. PDF Office Desktop (PDF24 Creator)
+          Write-Host "[8/10] Installing PDF Office..."
+          try {
+              winget install --id PDF24.PDF24Creator -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "PDF Office install error, skipping..." }
+
+          # 9. Spotify Desktop
+          Write-Host "[9/10] Installing Spotify..."
+          try {
+              winget install --id Spotify.Spotify -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "Spotify install error, skipping..." }
+
+          # 10. Canva Desktop
+          Write-Host "[10/10] Installing Canva..."
+          try {
+              winget install --id Canva.Canva -e --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Host "Canva install error, skipping..." }
+
+          Write-Host "=== All GUI Apps Installation Step Completed ==="
+
+      - name: Auto Clone Private Repository
+        env:
+          GH_USERNAME: ${{ secrets.GH_USERNAME }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          Write-Host "=== Auto Cloning Private Repo ==="
+          $desktopPath = "C:\Users\RDP\Desktop\nelsen-dashboard"
+          
+          if ($env:GH_PAT -and $env:GH_USERNAME) {
+              $authenticatedUrl = "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/nerusen/nelsen-dashboard.git"
+              
+              git clone $authenticatedUrl $desktopPath
+              
+              # Set credential helper di dalam repo folder biar bisa git commit/push tanpa masukin password lagi
+              Set-Location $desktopPath
+              git config user.name "$env:GH_USERNAME"
+              git config user.email "$env:GH_USERNAME@users.noreply.github.com"
+              
+              Write-Host "Repo 'nelsen-dashboard' berhasil di-clone di Desktop!"
+          } else {
+              Write-Warning "Secret GH_PAT atau GH_USERNAME belum diisi! Skip cloning."
+          }
+
+      - name: Install Tailscale
+        run: |
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = Join-Path $env:TEMP "tailscale.msi"
+          
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
+
+      - name: Establish Tailscale Connection
+        run: |
+          $tsExe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & $tsExe ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          
+          if (-not $tsIP) {
+              Write-Error "Tailscale IP not assigned. Exiting."
+              exit 1
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+      
+      - name: Verify RDP Accessibility
+        run: |
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error "TCP connection to RDP port 3389 failed"
+              exit 1
+          }
+          Write-Host "TCP connectivity successful!"
+
+      - name: Maintain Connection
+        run: |
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "Username: RDP"
+          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "Cloned Repo: C:\Users\RDP\Desktop\nelsen-dashboard"
+          Write-Host "==================`n"
+          
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+              Start-Sleep -Seconds 300
+          }
+          
