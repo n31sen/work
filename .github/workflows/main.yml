@@ -59,7 +59,7 @@ jobs:
               exit 1
           }
 
-      - name: Setup CLI Tools & AI Configs (Claude Code & OpenCode 9router)
+      - name: Setup CLI Tools & AI Configs (Claude Code & OpenCode)
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
@@ -82,13 +82,11 @@ jobs:
           # 3. Install Ollama CLI
           Write-Host "[CLI 3/6] Installing Ollama CLI..."
           try {
-              winget install --id Ollama.Ollama --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch {
               $ollamaUrl = "https://ollama.com/download/OllamaSetup.exe"
               $ollamaPath = Join-Path $env:TEMP "OllamaSetup.exe"
               Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath -UseBasicParsing
               Start-Process $ollamaPath -ArgumentList "/silent" -Wait
-          }
+          } catch { Write-Warning "Gagal install Ollama" }
 
           # 4. Install Claude Code CLI
           Write-Host "[CLI 4/6] Installing Claude Code CLI..."
@@ -143,7 +141,7 @@ jobs:
               Set-Content -Path $p -Value $opencodeJsonStr -Encoding UTF8
           }
 
-          Write-Host "Claude Code & OpenCode 9router configs applied successfully!"
+          Write-Host "Claude Code & OpenCode configs applied successfully!"
 
       - name: Auto Install GUI Apps (WhatsApp, Telegram, Discord, etc.)
         env:
@@ -152,45 +150,32 @@ jobs:
           $ErrorActionPreference = "Continue"
           Write-Host "=== Starting GUI Apps Auto-Installation ==="
 
-          # 1. WhatsApp Desktop (.msixbundle via Secret Variable)
+          # 1. WhatsApp Desktop
           Write-Host "[1/11] Installing WhatsApp Desktop..."
-          try {
-              if ($env:WA_URL) {
+          if ($env:WA_URL) {
+              try {
                   $waPath = Join-Path $env:TEMP "whatsapp.msixbundle"
                   Invoke-WebRequest -Uri $env:WA_URL -OutFile $waPath -UseBasicParsing
                   Add-AppxPackage -Path $waPath -AllUsers
-                  Remove-Item $waPath -Force -ErrorAction SilentlyContinue
                   Write-Host "WhatsApp Desktop installed successfully!"
-              } else {
-                  Write-Host "Secret WA_DESKTOP_URL belum diisi, skip WhatsApp..."
+              } catch { 
+                  Write-Warning "WhatsApp gagal (biasanya karena Windows Server lack of dependencies). $_" 
               }
-          } catch { Write-Host "Link WhatsApp error/expired, skip..." }
+          } else { Write-Host "Secret WA_DESKTOP_URL kosong, skip WhatsApp..." }
 
-          # 2. Telegram Desktop
-          Write-Host "[2/11] Installing Telegram Desktop..."
-          try {
-              $tgUrl = "https://telegram.org/dl/desktop/win64"
-              $tgPath = Join-Path $env:TEMP "tsetup.exe"
-              Invoke-WebRequest -Uri $tgUrl -OutFile $tgPath -UseBasicParsing
-              Start-Process $tgPath -ArgumentList "/VERYSILENT", "/NORESTART" -Wait
-              Remove-Item $tgPath -Force -ErrorAction SilentlyContinue
-          } catch { Write-Host "Telegram install error, skipping..." }
+          # 2. Telegram Desktop (Pakai Choco)
+          Write-Host "[2/11] Installing Telegram..."
+          choco install telegram -y --ignore-checksums
 
-          # 3. Discord Desktop
+          # 3. Discord Desktop (Pakai Choco)
           Write-Host "[3/11] Installing Discord..."
-          try {
-              $discordUrl = "https://discord.com/api/download?platform=win"
-              $discordPath = Join-Path $env:TEMP "DiscordSetup.exe"
-              Invoke-WebRequest -Uri $discordUrl -OutFile $discordPath -UseBasicParsing
-              Start-Process $discordPath -ArgumentList "/s" -Wait
-              Remove-Item $discordPath -Force -ErrorAction SilentlyContinue
-          } catch { Write-Host "Discord install error, skipping..." }
+          choco install discord -y --ignore-checksums
 
-          # 4. Trae Code Desktop x64
+          # 4. Trae Code Desktop (Winget dengan source eksplisit)
           Write-Host "[4/11] Installing Trae Code..."
           try {
-              winget install --id ByteDance.Trae --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "Trae install error, skipping..." }
+              winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Warning "Trae Code gagal: $_" }
 
           # 5. OpenCode Desktop
           Write-Host "[5/11] Installing OpenCode Desktop..."
@@ -199,44 +184,31 @@ jobs:
               $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
               Invoke-WebRequest -Uri $opencodeUrl -OutFile $opencodePath -UseBasicParsing
               Start-Process $opencodePath -ArgumentList "/S" -Wait
-              Remove-Item $opencodePath -Force -ErrorAction SilentlyContinue
-          } catch { Write-Host "OpenCode install error, skipping..." }
+          } catch { Write-Warning "OpenCode gagal: $_" }
 
-          # 6. Android Studio Desktop
+          # 6. Android Studio (Pakai Choco)
           Write-Host "[6/11] Installing Android Studio..."
-          try {
-              winget install --id Google.AndroidStudio --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "Android Studio install error, skipping..." }
+          choco install androidstudio -y --ignore-checksums
 
-          # 7. Brave Browser Desktop
-          Write-Host "[7/11] Installing Brave Browser..."
-          try {
-              winget install --id Brave.Brave --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "Brave install error, skipping..." }
+          # 7. Brave Browser (Pakai Choco)
+          Write-Host "[7/11] Installing Brave..."
+          choco install brave -y --ignore-checksums
 
-          # 8. Antigravity Desktop
-          Write-Host "[8/11] Installing Google Antigravity..."
-          try {
-              winget install --id Google.Antigravity --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "Antigravity install error, skipping..." }
+          # 8. Antigravity (Coba winget source khusus)
+          Write-Host "[8/11] Installing Antigravity..."
+          winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent || Write-Host "Antigravity tidak ditemukan."
 
-          # 9. PDF Office Desktop (PDF24)
-          Write-Host "[9/11] Installing PDF Office..."
-          try {
-              winget install --id PDF24.PDF24Creator --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "PDF Office install error, skipping..." }
+          # 9. PDF Office / PDF24 (Pakai Choco)
+          Write-Host "[9/11] Installing PDF24..."
+          choco install pdf24 -y --ignore-checksums
 
-          # 10. Spotify Desktop
+          # 10. Spotify Desktop (Pakai Choco)
           Write-Host "[10/11] Installing Spotify..."
-          try {
-              winget install --id Spotify.Spotify --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "Spotify install error, skipping..." }
+          choco install spotify -y --ignore-checksums
 
-          # 11. Canva Desktop
+          # 11. Canva Desktop (Pakai Choco)
           Write-Host "[11/11] Installing Canva..."
-          try {
-              winget install --id Canva.Canva --scope machine -e --accept-source-agreements --accept-package-agreements --silent
-          } catch { Write-Host "Canva install error, skipping..." }
+          choco install canva -y --ignore-checksums
 
           Write-Host "=== All GUI Apps Installation Completed ==="
 
@@ -265,12 +237,12 @@ jobs:
           }
           Set-ItemProperty -Path $sysEnvRegistry -Name "Path" -Value $currentPath
 
-          # 2. Buka permission folder runneradmin, ProgramData & RDP
+          # 2. Buka permission folder
           icacls "C:\Users\runneradmin" /grant "RDP:(OI)(CI)F" /T /q
           icacls "C:\ProgramData\npm" /grant "RDP:(OI)(CI)F" /T /q
           icacls "C:\Users\RDP" /grant "RDP:(OI)(CI)F" /T /q
           
-          # 3. Copy semua shortcut (.lnk & .url)
+          # 3. Copy semua shortcut ke RDP
           $rdpDesktop = "C:\Users\RDP\Desktop"
           $publicDesktop = "C:\Users\Public\Desktop"
           $runnerDesktop = "C:\Users\runneradmin\Desktop"
@@ -310,7 +282,7 @@ jobs:
               git config user.name "$env:GH_USERNAME"
               git config user.email "$env:GH_USERNAME@users.noreply.github.com"
               
-              Write-Host "Repo 'nelsen-dashboard' berhasil di-clone di Desktop RDP!"
+              Write-Host "Repo 'nelsen-dashboard' berhasil di-clone!"
           } else {
               Write-Warning "Secret GH_PAT atau GH_USERNAME belum diisi! Skip cloning."
           }
