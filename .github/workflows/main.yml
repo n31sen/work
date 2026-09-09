@@ -82,11 +82,16 @@ jobs:
           # 3. Install Ollama CLI
           Write-Host "[CLI 3/6] Installing Ollama CLI..."
           try {
+              winget install --id Ollama.Ollama --scope machine --accept-source-agreements --accept-package-agreements --silent
+          } catch {
+              Write-Warning "Winget gagal, coba via direct download..."
+              $ProgressPreference = 'SilentlyContinue' # Biar cepet, matiin loading bar bawaan shell
               $ollamaUrl = "https://ollama.com/download/OllamaSetup.exe"
               $ollamaPath = Join-Path $env:TEMP "OllamaSetup.exe"
               Invoke-WebRequest -Uri $ollamaUrl -OutFile $ollamaPath -UseBasicParsing
               Start-Process $ollamaPath -ArgumentList "/silent" -Wait
-          } catch { Write-Warning "Gagal install Ollama" }
+              Stop-Process -Name "ollama" -Force -ErrorAction SilentlyContinue # Bunuh proses background biar ga nge-hang
+          }
 
           # 4. Install Claude Code CLI
           Write-Host "[CLI 4/6] Installing Claude Code CLI..."
@@ -143,7 +148,7 @@ jobs:
 
           Write-Host "Claude Code & OpenCode configs applied successfully!"
 
-      - name: Auto Install GUI Apps (WhatsApp, Telegram, Discord, etc.)
+      - name: Auto Install GUI Apps (WhatsApp, Telegram, Discord, dll)
         env:
           WA_URL: ${{ secrets.WA_DESKTOP_URL }}
         run: |
@@ -171,7 +176,7 @@ jobs:
           Write-Host "[3/11] Installing Discord..."
           choco install discord -y --ignore-checksums
 
-          # 4. Trae Code Desktop (Winget dengan source eksplisit)
+          # 4. Trae Code Desktop
           Write-Host "[4/11] Installing Trae Code..."
           try {
               winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent
@@ -180,6 +185,7 @@ jobs:
           # 5. OpenCode Desktop
           Write-Host "[5/11] Installing OpenCode Desktop..."
           try {
+              $ProgressPreference = 'SilentlyContinue'
               $opencodeUrl = "https://opencode.ai/download/stable/windows-x64-nsis"
               $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
               Invoke-WebRequest -Uri $opencodeUrl -OutFile $opencodePath -UseBasicParsing
@@ -194,9 +200,11 @@ jobs:
           Write-Host "[7/11] Installing Brave..."
           choco install brave -y --ignore-checksums
 
-          # 8. Antigravity (Coba winget source khusus)
+          # 8. Antigravity
           Write-Host "[8/11] Installing Antigravity..."
-          winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent || Write-Host "Antigravity tidak ditemukan."
+          try {
+              winget install --id Google.Antigravity --source winget --accept-source-agreements --accept-package-agreements --silent
+          } catch { Write-Warning "Antigravity gagal: $_" }
 
           # 9. PDF Office / PDF24 (Pakai Choco)
           Write-Host "[9/11] Installing PDF24..."
