@@ -75,26 +75,26 @@ try {
 Write-Host "`n=== Memulai Instalasi Aplikasi GUI (Skip jika gagal) ==="
 
 # 7. WHATSAPP DESKTOP
-try { 
-    Write-Host "[>] Menginstall WhatsApp Desktop..."
-    winget install --id WhatsApp.WhatsApp --source winget --accept-source-agreements --accept-package-agreements --silent 
-    Write-Host "[v] WhatsApp sukses"
-} catch { Write-Warning "WhatsApp gagal di-install." }
+#try { 
+#    Write-Host "[>] Menginstall WhatsApp Desktop..."
+#    winget install --id WhatsApp.WhatsApp --source winget --accept-source-agreements --accept-package-agreements --silent 
+#    Write-Host "[v] WhatsApp sukses"
+#} catch { Write-Warning "WhatsApp gagal di-install." }
 
 
 # 8. MASS INSTALL VIA CHOCO (Telegram, Discord, Android Studio, Brave, PDF24, Spotify)
 try {
     Write-Host "[>] Menginstall Apps via Chocolatey (Proses cepat)..."
-    choco install telegram discord androidstudio brave pdf24 spotify -y --ignore-checksums --no-progress
+    choco install discord androidstudio spotify -y --ignore-checksums --no-progress
     Write-Host "[v] Choco Apps selesai!"
 } catch { Write-Warning "Ada aplikasi Choco yang gagal" }
 
 # 9. TRAE CODE
-try { 
-    Write-Host "[>] Menginstall Trae Code..."
-    winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent 
-    Write-Host "[v] Trae Code sukses"
-} catch { Write-Warning "Trae Code gagal" }
+#try { 
+#    Write-Host "[>] Menginstall Trae Code..."
+#    winget install --id ByteDance.Trae --source winget --accept-source-agreements --accept-package-agreements --silent 
+#    Write-Host "[v] Trae Code sukses"
+#} catch { Write-Warning "Trae Code gagal" }
 
 # 10. ANTIGRAVITY
 try { 
@@ -114,14 +114,14 @@ try {
 } catch { Write-Warning "OpenCode Desktop gagal" }
 
 # 12. CANVA DESKTOP
-try {
-    Write-Host "[>] Menginstall Canva Desktop..."
-    $canvaUrl = "https://desktop-release.canva.com/Canva%20Setup.exe"
-    $canvaPath = Join-Path $env:TEMP "CanvaSetup.exe"
-    Invoke-WebRequest -Uri $canvaUrl -OutFile $canvaPath -UseBasicParsing
-    Start-Process $canvaPath -ArgumentList "/S" -Wait
-    Write-Host "[v] Canva sukses"
-} catch { Write-Warning "Canva Desktop gagal" }
+#try {
+#    Write-Host "[>] Menginstall Canva Desktop..."
+#    $canvaUrl = "https://desktop-release.canva.com/Canva%20Setup.exe"
+#    $canvaPath = Join-Path $env:TEMP "CanvaSetup.exe"
+#    Invoke-WebRequest -Uri $canvaUrl -OutFile $canvaPath -UseBasicParsing
+#    Start-Process $canvaPath -ArgumentList "/S" -Wait
+#    Write-Host "[v] Canva sukses"
+#} catch { Write-Warning "Canva Desktop gagal" }
 
 
 Write-Host "`n=== Finalisasi Environment & Shortcuts ==="
