@@ -10,7 +10,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4 # WAJIB: Biar RDP bisa baca file setup_apps.ps1 dari repo lu
+        uses: actions/checkout@v4
 
       - name: Configure Core RDP Settings
         run: |
@@ -23,28 +23,32 @@ jobs:
 
           Restart-Service -Name TermService -Force
 
-      - name: Create RDP User with Custom Password
+      - name: Create Custom RDP User
+        env:
+          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          # Tarik password dari GitHub Secrets (RDP_PASSWORD)
-          $password = "${{ secrets.RDP_PASSWORD }}"
-          
-          if ([string]::IsNullOrWhiteSpace($password)) {
-              Write-Error "Secret RDP_PASSWORD kosong nih! Bikin dulu di Settings repo lu bro."
-              exit 1
-          }
+          # Ambil dari secret, kalo kosong kasih fallback "AdminRDP" biar ga error
+          $user = if ($env:RDP_USERNAME) { $env:RDP_USERNAME } else { "AdminRDP" }
+          $pass = if ($env:RDP_PASSWORD) { $env:RDP_PASSWORD } else { "P@ssw0rdKuat123!" }
 
-          $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-          New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+          $securePass = ConvertTo-SecureString $pass -AsPlainText -Force
+          New-LocalUser -Name $user -Password $securePass -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member $user
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
           
-          if (-not (Get-LocalUser -Name "RDP")) {
+          # Simpan nama dan pass ke global env biar step terakhir bisa nampilin
+          echo "CURRENT_USER=$user" >> $env:GITHUB_ENV
+          echo "CURRENT_PASS=$pass" >> $env:GITHUB_ENV
+          
+          if (-not (Get-LocalUser -Name $user)) {
               Write-Error "User creation failed"
               exit 1
           }
 
       - name: Run Setup Apps Script
         env:
+          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
           WA_URL: ${{ secrets.WA_DESKTOP_URL }}
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           GH_USERNAME: ${{ secrets.GH_USERNAME }}
@@ -99,8 +103,8 @@ jobs:
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
-          Write-Host "Username: RDP"
-          Write-Host "Password: (Sesuai sama yang lu masukin di Secret RDP_PASSWORD)"
+          Write-Host "Username: $env:CURRENT_USER"
+          Write-Host "Password: $env:CURRENT_PASS"
           Write-Host "==================`n"
           while ($true) { Start-Sleep -Seconds 300 }
           
