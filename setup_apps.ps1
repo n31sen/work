@@ -1,60 +1,63 @@
 # ==========================================
-# PENGINSTALAN APP BERSIH & GOD MODE PERMISSION
+# PENGINSTALAN APP BERSIH & DYNAMIC SHORTCUTS
 # ==========================================
 
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 
-# Buka gerbang eksekusi biar bebas dari blokir policy Windows
 Set-ExecutionPolicy Bypass -Scope LocalMachine -Force
 
-Write-Host "=== Membuka Semua Kunci Akses (God Mode) ==="
-# Nembak langsung ke folder target & nge-MUTE (bungkam) pesan error dari folder siluman Windows
-icacls "C:\Users\runneradmin\AppData\Local" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
-icacls "C:\Users\runneradmin\AppData\Roaming" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+Write-Host "=== Membuka Kunci Akses (God Mode) ==="
+icacls "C:\Users\runneradmin" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+icacls "C:\Program Files" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
 icacls "C:\ProgramData" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
-Write-Host "[v] Akses tanpa batas diizinkan (Spam error berhasil disembunyikan)."
+Write-Host "[v] Akses tanpa batas diizinkan."
 
 Write-Host "`n=== Menginstall Aplikasi Utama ==="
-# Install NodeJS (buat Claude), VS Code, Discord, Spotify via Chocolatey
+# VS Code & Antigravity (Winget lebih stabil buat pasang di Program Files)
 try {
-    choco install nodejs vscode discord spotify -y --ignore-checksums --no-progress
-    Write-Host "[v] Choco Apps (VSCode, Discord, Spotify, Node) sukses."
-} catch { Write-Warning "Ada aplikasi Choco yang gagal." }
+    winget install --id Microsoft.VisualStudioCode --machine --accept-source-agreements --accept-package-agreements --silent
+    winget install --id Google.Antigravity --machine --accept-source-agreements --accept-package-agreements --silent
+} catch {}
 
-# Install Antigravity via Winget
-try {
-    winget install --id Google.Antigravity --machine --source winget --accept-source-agreements --accept-package-agreements --silent
-    Write-Host "[v] Antigravity sukses."
-} catch { Write-Warning "Antigravity gagal." }
+# Discord, Spotify, NodeJS (Choco)
+try { choco install nodejs discord spotify -y --ignore-checksums --no-progress } catch {}
 
-Write-Host "`n=== Membuat Hardcoded Shortcut (Anti-Blank) ==="
+
+Write-Host "`n=== Membuat Shortcut Cerdas (Otomatis Nyari Jalur .exe) ==="
 try {
     $publicDesktop = "C:\Users\Public\Desktop"
     $wshShell = New-Object -ComObject WScript.Shell
     
-    # 1. Shortcut VS Code (Global)
-    $scVSCode = $wshShell.CreateShortcut("$publicDesktop\Visual Studio Code.lnk")
-    $scVSCode.TargetPath = "C:\Program Files\Microsoft VS Code\Code.exe"
-    $scVSCode.Save()
+    # 1. VS Code (Cari di Program Files ATAU AppData)
+    $vscodeExe = Get-ChildItem -Path "C:\Program Files", "C:\Users\runneradmin\AppData" -Filter "Code.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($vscodeExe) {
+        $sc = $wshShell.CreateShortcut("$publicDesktop\Visual Studio Code.lnk")
+        $sc.TargetPath = $vscodeExe.FullName
+        $sc.Save()
+    }
 
-    # 2. Shortcut Discord (Nembak ke AppData runneradmin)
-    $scDiscord = $wshShell.CreateShortcut("$publicDesktop\Discord.lnk")
-    $scDiscord.TargetPath = "C:\Users\runneradmin\AppData\Local\Discord\Update.exe"
-    $scDiscord.Arguments = "--processStart Discord.exe"
-    $scDiscord.IconLocation = "C:\Users\runneradmin\AppData\Local\Discord\app.ico"
-    $scDiscord.Save()
+    # 2. Discord (Cari Update.exe atau Discord.exe yang asli)
+    $discordExe = Get-ChildItem -Path "C:\Users\runneradmin\AppData" -Filter "Update.exe" -Recurse -ErrorAction SilentlyContinue | Where-Object {$_.DirectoryName -match "Discord"} | Select-Object -First 1
+    if ($discordExe) {
+        $sc = $wshShell.CreateShortcut("$publicDesktop\Discord.lnk")
+        $sc.TargetPath = $discordExe.FullName
+        $sc.Arguments = "--processStart Discord.exe"
+        $sc.IconLocation = "$($discordExe.DirectoryName)\app.ico"
+        $sc.Save()
+    }
 
-    # 3. Shortcut Spotify (Nembak ke AppData runneradmin)
-    $scSpotify = $wshShell.CreateShortcut("$publicDesktop\Spotify.lnk")
-    $scSpotify.TargetPath = "C:\Users\runneradmin\AppData\Roaming\Spotify\Spotify.exe"
-    $scSpotify.Save()
-    
-    # Hapus shortcut bawaan dari runneradmin biar ga dobel & blank
-    $runnerDesktop = "C:\Users\runneradmin\Desktop"
-    if (Test-Path $runnerDesktop) { Remove-Item "$runnerDesktop\*.lnk" -Force -ErrorAction SilentlyContinue }
+    # 3. Spotify (Cari Spotify.exe yang asli, bukan pajangan Choco)
+    $spotifyExe = Get-ChildItem -Path "C:\Users\runneradmin\AppData" -Filter "Spotify.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($spotifyExe) {
+        $sc = $wshShell.CreateShortcut("$publicDesktop\Spotify.lnk")
+        $sc.TargetPath = $spotifyExe.FullName
+        $sc.Save()
+    }
 
-    Write-Host "[v] Shortcut Desktop berhasil dibuat dengan jalur absolut!"
+    # Bersihin desktop dari shortcut ampas bawaan instalasi
+    Remove-Item "C:\Users\runneradmin\Desktop\*.lnk" -Force -ErrorAction SilentlyContinue
+    Write-Host "[v] Shortcut bersih dan akurat berhasil dibuat!"
 } catch { Write-Warning "Gagal membuat shortcut." }
 
 Write-Host "=== SETUP BERSIH SELESAI! ==="
