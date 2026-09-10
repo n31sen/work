@@ -1,63 +1,54 @@
 # ==========================================
 # SCRIPT INSTALASI APLIKASI & KONFIGURASI AI
-# (Minimalist Pro Version + Full Permissions Fix)
+# (Fix Profile, Hidden Startup & AppData Relocation)
 # ==========================================
 
-# 1. SETUP CORE & ANTI-SPAM
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 $hardcoded9routerUrl = "https://9router.nelsen.web.id/v1"
 
-# Buka akses full jalankan script PowerShell di PC ini tanpa diblokir
 Set-ExecutionPolicy Bypass -Scope LocalMachine -Force
 
 Write-Host "=== Memulai Konfigurasi Environment & CLI ==="
 
-# 2. GIT & NPM GLOBAL CONFIG
+# 1. GIT & NPM GLOBAL CONFIG
 try {
     git config --system user.name "$env:GH_USERNAME"
     git config --system user.email "$env:GH_USERNAME@users.noreply.github.com"
     New-Item -ItemType Directory -Force -Path "C:\ProgramData\npm" | Out-Null
     npm config set prefix "C:\ProgramData\npm" --global
-    Write-Host "[v] Git & NPM Configured (Global)"
-} catch { Write-Warning "Gagal setting Git/NPM" }
+} catch { }
 
-# 3. OLLAMA CLI (Portable)
+# 2. OLLAMA CLI
 try {
-    Write-Host "[>] Setup Ollama CLI..."
-    $ollamaZipUrl = "https://ollama.com/download/ollama-windows-amd64.zip"
     $ollamaZipPath = Join-Path $env:TEMP "ollama.zip"
-    Invoke-WebRequest -Uri $ollamaZipUrl -OutFile $ollamaZipPath -UseBasicParsing
+    Invoke-WebRequest -Uri "https://ollama.com/download/ollama-windows-amd64.zip" -OutFile $ollamaZipPath -UseBasicParsing
     Expand-Archive -Path $ollamaZipPath -DestinationPath "C:\Program Files\Ollama" -Force
-    Write-Host "[v] Ollama CLI sukses"
-} catch { Write-Warning "Gagal install Ollama" }
+} catch { }
 
-# 4. CLAUDE CODE & OPENCODE CLI (NPM)
+# 3. CLAUDE & OPENCODE CLI
 try {
-    Write-Host "[>] Setup Claude Code & OpenCode CLI..."
     npm install -g @anthropic-ai/claude-code opencode --no-progress --fund=false --audit=false | Out-Null
-    Write-Host "[v] CLI AI (Claude & OpenCode) sukses"
-} catch { Write-Warning "Gagal install CLI berbasis NPM" }
+} catch { }
 
-# 5. ENVIRONMENT VARIABLES (9ROUTER)
+# 4. ENVIRONMENT VARIABLES
 try {
     [Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", $hardcoded9routerUrl, "Machine")
     [Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", $hardcoded9routerUrl, "Machine")
     if ($env:CLAUDE_API_KEY) {
         [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", $env:CLAUDE_API_KEY, "Machine")
-        [Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", $env:CLAUDE_API_KEY, "Machine")
         [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $env:CLAUDE_API_KEY, "Machine")
     }
-    Write-Host "[v] Environment Variables 9Router Terpasang"
-} catch { Write-Warning "Gagal setting Env Var" }
+} catch { }
 
-# 6. AUTO-SETUP JSON CONFIG (Via Startup)
+# 5. AUTO-SETUP AI CONFIG (Bikin Skripnya jalan hidden & pake Default User)
 try {
     $startupFolder = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup"
-    $initScriptPath = "$startupFolder\init_ai_configs.ps1"
+    $initScriptPath = "C:\ProgramData\init_ai_configs.ps1"
     
     New-Item -ItemType File -Force -Path $initScriptPath | Out-Null
-    Add-Content -Path $initScriptPath -Value "`$userProfile = `"C:\Users\RDP`""
+    # Skrip ini bakal jalan pas lu login, dia deteksi folder profil asli lu
+    Add-Content -Path $initScriptPath -Value "`$userProfile = `$env:USERPROFILE"
     Add-Content -Path $initScriptPath -Value "`$claudeDir = Join-Path `$userProfile '.claude'"
     Add-Content -Path $initScriptPath -Value "if (-not (Test-Path `$claudeDir)) { New-Item -ItemType Directory -Force -Path `$claudeDir }"
     Add-Content -Path $initScriptPath -Value "`$claudeJson = @{ env = @{ ANTHROPIC_BASE_URL = '$hardcoded9routerUrl' } }"
@@ -67,161 +58,147 @@ try {
     Add-Content -Path $initScriptPath -Value "`$opencodeObj = @{ '`$schema' = 'https://opencode.ai/config.json'; provider = @{ '9router' = @{ npm = '@ai-sdk/openai'; name = '9router'; options = @{ baseURL = '$hardcoded9routerUrl'; apiKey = '$env:CLAUDE_API_KEY' }; models = @{ 'nelsen-up' = @{ name = 'nelsen-up' }; 'nelsen-over' = @{ name = 'nelsen-over' }; 'nelsen-vibe' = @{ name = 'nelsen-vibe' } } } }; model = '9router/nelsen-up' }"
     Add-Content -Path $initScriptPath -Value "`$opencodeJsonStr = `$opencodeObj | ConvertTo-Json -Depth 10"
     Add-Content -Path $initScriptPath -Value "foreach (`$d in `$opencodeDirs) { Set-Content -Path (Join-Path `$d 'config.json') -Value `$opencodeJsonStr -Encoding UTF8 }"
-    Add-Content -Path $initScriptPath -Value "Remove-Item -Path `$PSCommandPath -Force"
+    Add-Content -Path $initScriptPath -Value "Remove-Item -Path `$PSCommandPath -Force" # Hapus diri sendiri biar jalan sekali doang
     
-    $wshShell = New-Object -ComObject WScript.Shell
-    $shortcut = $wshShell.CreateShortcut("$startupFolder\InitAIConfigs.lnk")
-    $shortcut.TargetPath = "powershell.exe"
-    $shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$initScriptPath`""
-    $shortcut.Save()
-    Write-Host "[v] Auto-Config JSON Script Siap"
-} catch { Write-Warning "Gagal membuat script auto-config JSON" }
+    # Bikin VBScript pembungkus biar 100% GAK MUNCUL jendela terminal hitam
+    $vbsPath = "$startupFolder\SilentStartup.vbs"
+    Set-Content -Path $vbsPath -Value "CreateObject(`"WScript.Shell`").Run `"powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\ProgramData\init_ai_configs.ps1`", 0, False"
+} catch { }
 
 
 Write-Host "`n=== Memulai Instalasi Aplikasi GUI & Tools ==="
 
-# 7. CHOCOLATEY APPS (Discord, Spotify, VS Code)
-try {
-    Write-Host "[>] Menginstall Discord, Spotify, VS Code..."
-    choco install discord spotify vscode -y --ignore-checksums --no-progress
-    Write-Host "[v] Choco Apps selesai!"
-} catch { Write-Warning "Ada aplikasi Choco yang gagal" }
+# 6. CHOCOLATEY APPS (Discord, Spotify, VS Code)
+try { choco install discord spotify vscode -y --ignore-checksums --no-progress } catch { }
 
-# 8. WINGET APPS (Antigravity & Oh-My-Posh via Machine Scope)
-try { 
-    Write-Host "[>] Menginstall Antigravity..."
-    winget install --id Google.Antigravity --machine --source winget --accept-source-agreements --accept-package-agreements --silent 
-    Write-Host "[v] Antigravity sukses"
-} catch { Write-Warning "Antigravity gagal" }
-
+# 7. WINGET APPS (Antigravity & Oh-My-Posh)
+try { winget install --id Google.Antigravity --machine --source winget --accept-source-agreements --accept-package-agreements --silent } catch { }
 try {
-    Write-Host "[>] Menginstall Oh-My-Posh (Machine Scope)..."
     winget install JanDeDobbeleer.OhMyPosh --machine -s winget --accept-source-agreements --accept-package-agreements --silent
-    Write-Host "[v] Oh-My-Posh sukses"
     
-    # Auto Inject Oh-My-Posh Theme ke PowerShell Profile Spesifik RDP User
-    $rdpProfileDir = "C:\Users\RDP\Documents\PowerShell"
-    if (-not (Test-Path $rdpProfileDir)) { New-Item -ItemType Directory -Force -Path $rdpProfileDir | Out-Null }
-    $rdpPsProfile = Join-Path $rdpProfileDir "Microsoft.PowerShell_profile.ps1"
+    # Masukin config OhMyPosh ke folder DEFAULT. Biar Windows yang nge-copyin ke folder profil lu nanti!
+    $defaultProfileDir = "C:\Users\Default\Documents\PowerShell"
+    if (-not (Test-Path $defaultProfileDir)) { New-Item -ItemType Directory -Force -Path $defaultProfileDir | Out-Null }
+    $defaultPsProfile = Join-Path $defaultProfileDir "Microsoft.PowerShell_profile.ps1"
     
     $themeCmd = "oh-my-posh init pwsh --config `"`$env:POSH_THEMES_PATH\jandedobbeleer.omp.json`" | Invoke-Expression"
-    Set-Content -Path $rdpPsProfile -Value $themeCmd -Encoding UTF8
-    Write-Host "[v] Tema Terminal Oh-My-Posh dipasang ke Profile RDP!"
-} catch { Write-Warning "Oh-My-Posh gagal dipasang" }
+    Set-Content -Path $defaultPsProfile -Value $themeCmd -Encoding UTF8
+} catch { }
 
-# 9. OPENCODE DESKTOP
+# 8. OPENCODE DESKTOP
 try {
-    Write-Host "[>] Menginstall OpenCode Desktop..."
-    $opencodeUrl = "https://opencode.ai/download/stable/windows-x64-nsis"
     $opencodePath = Join-Path $env:TEMP "opencode-setup.exe"
-    Invoke-WebRequest -Uri $opencodeUrl -OutFile $opencodePath -UseBasicParsing
+    Invoke-WebRequest -Uri "https://opencode.ai/download/stable/windows-x64-nsis" -OutFile $opencodePath -UseBasicParsing
     Start-Process $opencodePath -ArgumentList "/S" -Wait
-    Write-Host "[v] OpenCode Desktop sukses"
-} catch { Write-Warning "OpenCode Desktop gagal" }
+} catch { }
 
-
-# 10. HERMES AGENT (CLI + DESKTOP)
+# 9. HERMES AGENT (CLI + DESKTOP)
 try {
-    Write-Host "[>] Menginstall Hermes Agent CLI..."
+    $env:CI = "true"
+    $env:NPM_CONFIG_PROGRESS = "false"
+    $env:NPM_CONFIG_FUND = "false"
+    $env:NPM_CONFIG_AUDIT = "false"
+    $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
     Invoke-Expression (Invoke-RestMethod "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1")
-    Write-Host "[v] Hermes Agent CLI sukses!"
     
-    Write-Host "[>] Mendownload Hermes Desktop (GUI)..."
     $hermesRel = Invoke-RestMethod -Uri "https://api.github.com/repos/fathah/hermes-desktop/releases/latest"
     $hermesAsset = $hermesRel.assets | Where-Object { $_.name -match '\.exe$' } | Select-Object -First 1
     if ($hermesAsset) {
         $hermesPath = Join-Path $env:TEMP "hermes-desktop-setup.exe"
         Invoke-WebRequest -Uri $hermesAsset.browser_download_url -OutFile $hermesPath -UseBasicParsing
-        
-        # HILANGKAN -Wait biar gak stuck pas aplikasi auto-start
         Start-Process $hermesPath -ArgumentList "/S" 
-        
-        # Kasih jeda waktu 10 detik biar installernya kelar di background
         Start-Sleep -Seconds 10
-        Write-Host "[v] Hermes Desktop diinstal di background!"
     }
-} catch { Write-Warning "Hermes Agent gagal di-install" }
+} catch { }
 
 
-Write-Host "`n=== Finalisasi Environment, Permissions, & Shortcuts ==="
+Write-Host "`n=== Relokasi AppData & Finalisasi ==="
 
-# 11. FIX SINKRONISASI PATH SYSTEM
+# 10. PINDAHKAN APLIKASI BANDEL KE PROGRAM FILES (Biar semua user bisa buka)
+try {
+    # Relokasi Discord
+    if (Test-Path "C:\Users\runneradmin\AppData\Local\Discord") {
+        Move-Item "C:\Users\runneradmin\AppData\Local\Discord" "C:\Program Files\Discord" -Force -Recurse -ErrorAction SilentlyContinue
+    }
+    # Relokasi Spotify
+    if (Test-Path "C:\Users\runneradmin\AppData\Roaming\Spotify") {
+        Move-Item "C:\Users\runneradmin\AppData\Roaming\Spotify" "C:\Program Files\Spotify" -Force -Recurse -ErrorAction SilentlyContinue
+    }
+    # Relokasi Hermes Desktop
+    if (Test-Path "C:\Users\runneradmin\AppData\Local\Programs\hermes-desktop") {
+        Move-Item "C:\Users\runneradmin\AppData\Local\Programs\hermes-desktop" "C:\Program Files\HermesDesktop" -Force -Recurse -ErrorAction SilentlyContinue
+    }
+} catch { }
+
+# 11. BIKIN SHORTCUT MANUAL DI PUBLIC DESKTOP (Anti Rusak)
+try {
+    $publicDesktop = "C:\Users\Public\Desktop"
+    $wshShell = New-Object -ComObject WScript.Shell
+    
+    # Shortcut Discord
+    if (Test-Path "C:\Program Files\Discord\Update.exe") {
+        $sc = $wshShell.CreateShortcut("$publicDesktop\Discord.lnk")
+        $sc.TargetPath = "C:\Program Files\Discord\Update.exe"
+        $sc.Arguments = "--processStart Discord.exe"
+        $sc.Save()
+    }
+    # Shortcut Spotify
+    if (Test-Path "C:\Program Files\Spotify\Spotify.exe") {
+        $sc = $wshShell.CreateShortcut("$publicDesktop\Spotify.lnk")
+        $sc.TargetPath = "C:\Program Files\Spotify\Spotify.exe"
+        $sc.Save()
+    }
+    # Shortcut Hermes Desktop
+    if (Test-Path "C:\Program Files\HermesDesktop\hermes-desktop.exe") {
+        $sc = $wshShell.CreateShortcut("$publicDesktop\Hermes Desktop.lnk")
+        $sc.TargetPath = "C:\Program Files\HermesDesktop\hermes-desktop.exe"
+        $sc.Save()
+    }
+    
+    # Hapus shortcut bawaan runneradmin yang rusak biar desktop lu bersih
+    $runnerDesktop = "C:\Users\runneradmin\Desktop"
+    if (Test-Path $runnerDesktop) {
+        $allShortcuts = Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse
+        foreach ($shortcut in $allShortcuts) {
+            if ($shortcut.Name -match "Visual Studio Code|OpenCode|Ollama") { 
+                Copy-Item -Path $shortcut.FullName -Destination $publicDesktop -Force
+            }
+        }
+    }
+} catch { }
+
+# 12. FIX SYSTEM PATH
 try {
     $sysEnvRegistry = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
     $currentPath = (Get-ItemProperty -Path $sysEnvRegistry).Path
-    
-    # Path-path wajib biar CLI lancar dibaca user RDP
     $pathsToAdd = @(
         "C:\ProgramData\npm", 
         "C:\Program Files\nodejs", 
         "C:\Program Files\Git\cmd", 
         "C:\Program Files\Ollama", 
         "C:\Program Files\oh-my-posh\bin",
-        "C:\Users\runneradmin\AppData\Local\Programs\oh-my-posh\bin",
-        "C:\Users\runneradmin\AppData\Roaming\npm",
-        "C:\Users\runneradmin\AppData\Local\Hermes",               # Tambahan buat path Hermes CLI
-        "C:\Users\runneradmin\AppData\Local\Hermes\hermes-agent"   # Tambahan buat path Hermes CLI
+        "C:\Users\runneradmin\AppData\Local\Hermes",               
+        "C:\Users\runneradmin\AppData\Local\Hermes\hermes-agent"
     )
-    
     foreach ($p in $pathsToAdd) { if ($currentPath -notlike "*$p*") { $currentPath = "$currentPath;$p" } }
     Set-ItemProperty -Path $sysEnvRegistry -Name "Path" -Value $currentPath
-    Write-Host "[v] System PATH Update (Termasuk path Hermes CLI)"
-} catch { Write-Warning "Gagal sync PATH" }
+} catch { }
 
-
-# 12. CLONE DASHBOARD REPO (TARUH DI C:\Users\RDP\Desktop BIAR AMAN)
+# 13. CLONE DASHBOARD & FIX PERMISSIONS
 try {
-    $targetDesktop = "C:\Users\RDP\Desktop"
-    if (-not (Test-Path $targetDesktop)) { New-Item -ItemType Directory -Force -Path $targetDesktop | Out-Null }
+    # Hajar semua folder profil pake Full Control biar lu bebas ngapain aja
+    icacls "C:\Users\runneradmin" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
+    icacls "C:\Program Files" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
     
     if ($env:GH_PAT -and $env:GH_USERNAME) {
-        $desktopPath = "$targetDesktop\nelsen-dashboard"
-        $authenticatedUrl = "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/nerusen/nelsen-dashboard.git"
-        git clone -q $authenticatedUrl $desktopPath
-        Set-Location $desktopPath
+        $pubDashPath = "C:\Users\Public\Desktop\nelsen-dashboard"
+        git clone -q "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/nerusen/nelsen-dashboard.git" $pubDashPath
+        Set-Location $pubDashPath
         git config user.name "$env:GH_USERNAME"
         git config user.email "$env:GH_USERNAME@users.noreply.github.com"
-        Write-Host "[v] Nelsen Dashboard sukses diclone ke Desktop RDP"
+        icacls $pubDashPath /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
     }
-} catch { Write-Warning "Clone repo gagal" }
-
-# 13. FIX PERMISSIONS SUPER MAXIMAL (Hajar Hak Akses Semua Folder Penting)
-try {
-    Write-Host "[>] Memberikan akses Full Control ke user RDP & Everyone..."
-    
-    # Folder NPM Biar ga error npm install
-    icacls "C:\ProgramData\npm" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-    
-    # Folder NodeJS
-    icacls "C:\Program Files\nodejs" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-    
-    # Repo Dashboard Biar bebas edit/jalanin script di VSCode tanpa Admin
-    if (Test-Path "C:\Users\RDP\Desktop\nelsen-dashboard") {
-        icacls "C:\Users\RDP\Desktop\nelsen-dashboard" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-    }
-
-    # Buka Akses Folder Profil RDP Biar bebas utak-atik VSCode config dll
-    icacls "C:\Users\RDP" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-    
-    Write-Host "[v] Semua perizinan Folder (NPM, Project, Profile) berhasil di-unlock!"
-} catch { Write-Warning "Gagal bypass perizinan folder" }
-
-# 14. WHITELIST SHORTCUTS
-try {
-    $publicDesktop = "C:\Users\Public\Desktop"
-    $runnerDesktop = "C:\Users\runneradmin\Desktop"
-    $allowedApps = @("Discord", "Spotify", "Antigravity", "Visual Studio Code", "OpenCode", "Hermes", "Ollama")
-    
-    if (Test-Path $runnerDesktop) {
-        $allShortcuts = Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
-        foreach ($shortcut in $allShortcuts) {
-            foreach ($app in $allowedApps) {
-                if ($shortcut.Name -match $app) { Copy-Item -Path $shortcut.FullName -Destination $publicDesktop -Force -ErrorAction SilentlyContinue; break }
-            }
-        }
-    }
-    Write-Host "[v] Desktop Shortcuts disinkronkan"
-} catch { Write-Warning "Gagal sync shortcut" }
+} catch { }
 
 Write-Host "=== SETUP SELESAI, READY TO USE! ==="
 exit 0
