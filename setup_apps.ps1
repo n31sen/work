@@ -85,7 +85,7 @@ Write-Host "`n=== Memulai Instalasi Aplikasi GUI (Skip jika gagal) ==="
 # 8. MASS INSTALL VIA CHOCO (Telegram, Discord, Android Studio, Brave, PDF24, Spotify)
 try {
     Write-Host "[>] Menginstall Apps via Chocolatey (Proses cepat)..."
-    choco install discord androidstudio spotify -y --ignore-checksums --no-progress
+    choco install hermes-desktop discord vscode claude kortix openship oh-my-posh t3-code spotify -y --ignore-checksums --no-progress
     Write-Host "[v] Choco Apps selesai!"
 } catch { Write-Warning "Ada aplikasi Choco yang gagal" }
 
@@ -144,7 +144,7 @@ try {
 try {
     $publicDesktop = "C:\Users\Public\Desktop"
     $runnerDesktop = "C:\Users\runneradmin\Desktop"
-    $allowedApps = @("Brave", "Canva", "Discord", "Telegram", "Spotify", "Android Studio", "Trae", "OpenCode", "PDF24", "Antigravity", "Ollama", "WhatsApp")
+    $allowedApps = @("Brave", "Discord", "vscode", "Spotify", "Android Studio", "OpenCode", "Antigravity", "Ollama")
     
     if (Test-Path $runnerDesktop) {
         $allShortcuts = Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
@@ -160,7 +160,7 @@ try {
 # 15. AUTO CLONE DASHBOARD REPO
 if ($env:GH_PAT -and $env:GH_USERNAME) {
     try {
-        $desktopPath = "C:\Users\Public\Desktop\nelsen-dashboard"
+        $desktopPath = "C:\Users\public\Desktop\nelsen-dashboard"
         $authenticatedUrl = "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/nerusen/nelsen-dashboard.git"
         git clone -q $authenticatedUrl $desktopPath
         Set-Location $desktopPath
