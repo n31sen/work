@@ -27,19 +27,15 @@ try {
 } catch { }
 
 # 3. CLAUDE & OPENCODE CLI
-try {
-    npm install -g @anthropic-ai/claude-code opencode --no-progress --fund=false --audit=false | Out-Null
-} catch { }
 
-# 4. ENVIRONMENT VARIABLES
+# 4. CLAUDE CODE CLI (NPM)
 try {
-    [Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", $hardcoded9routerUrl, "Machine")
-    [Environment]::SetEnvironmentVariable("OPENAI_BASE_URL", $hardcoded9routerUrl, "Machine")
-    if ($env:CLAUDE_API_KEY) {
-        [Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", $env:CLAUDE_API_KEY, "Machine")
-        [Environment]::SetEnvironmentVariable("OPENAI_API_KEY", $env:CLAUDE_API_KEY, "Machine")
-    }
-} catch { }
+    Write-Host "[>] Setup Claude Code CLI..."
+    # HAPUS kata 'opencode' dari sini, sisa claude-code aja
+    npm install -g @anthropic-ai/claude-code --no-progress --fund=false --audit=false | Out-Null
+    Write-Host "[v] Claude Code CLI sukses"
+} catch { Write-Warning "Gagal install CLI berbasis NPM" }
+
 
 # 5. AUTO-SETUP AI CONFIG (Bikin Skripnya jalan hidden & pake Default User)
 try {
