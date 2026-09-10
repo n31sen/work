@@ -226,10 +226,3 @@ try {
 
 Write-Host "=== SETUP SELESAI, WELCOME TO GOD MODE! ==="
 exit 0
-m"
-        icacls $pubDashPath /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-    }
-} catch { }
-
-Write-Host "=== SETUP SELESAI, READY TO USE! ==="
-exit 0
