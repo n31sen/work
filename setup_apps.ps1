@@ -140,7 +140,7 @@ try {
 try {
     $publicDesktop = "C:\Users\Public\Desktop"
     $runnerDesktop = "C:\Users\runneradmin\Desktop"
-    $allowedApps = @("Brave", "Discord", "vscode", "Spotify", "Android Studio", "OpenCode", "Antigravity", "Ollama")
+    $allowedApps = @("Discord", "vscode", "Spotify", "OpenCode", "Antigravity", "Ollama")
     
     if (Test-Path $runnerDesktop) {
         $allShortcuts = Get-ChildItem -Path $runnerDesktop -Include *.lnk, *.url -Recurse -ErrorAction SilentlyContinue
