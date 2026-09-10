@@ -75,8 +75,9 @@ jobs:
       - name: Establish Tailscale Connection
         run: |
           $tsExe = Join-Path $env:ProgramFiles "Tailscale\tailscale.exe"
-          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
-          
+          # Ganti hostname pake nama permanen kesukaan lu
+          & $tsExe up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=Nelsen-RDP
+         
           $tsIP = $null
           $retries = 0
           while (-not $tsIP -and $retries -lt 10) {
