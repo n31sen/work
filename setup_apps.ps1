@@ -1,7 +1,3 @@
-# ==========================================
-# SCRIPT INSTALASI APLIKASI & KONFIGURASI AI
-# ==========================================
-
 # 1. SETUP ANTI-SPAM & ANTI-GAGAL
 $ErrorActionPreference = "Continue"     # Kalo ada app gagal, tetep lanjut ke app berikutnya
 $ProgressPreference = "SilentlyContinue" # Matiin spam loading indikator (/ - \ |) biar log bersih
