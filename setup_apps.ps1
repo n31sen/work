@@ -119,6 +119,7 @@ try {
     Write-Host "[v] OpenCode Desktop sukses"
 } catch { Write-Warning "OpenCode Desktop gagal" }
 
+
 # 10. HERMES AGENT (CLI + DESKTOP)
 try {
     Write-Host "[>] Menginstall Hermes Agent CLI..."
@@ -131,8 +132,13 @@ try {
     if ($hermesAsset) {
         $hermesPath = Join-Path $env:TEMP "hermes-desktop-setup.exe"
         Invoke-WebRequest -Uri $hermesAsset.browser_download_url -OutFile $hermesPath -UseBasicParsing
-        Start-Process $hermesPath -ArgumentList "/S" -Wait
-        Write-Host "[v] Hermes Desktop sukses!"
+        
+        # HILANGKAN -Wait biar gak stuck pas aplikasi auto-start
+        Start-Process $hermesPath -ArgumentList "/S" 
+        
+        # Kasih jeda waktu 10 detik biar installernya kelar di background
+        Start-Sleep -Seconds 10
+        Write-Host "[v] Hermes Desktop diinstal di background!"
     }
 } catch { Write-Warning "Hermes Agent gagal di-install" }
 
@@ -152,13 +158,16 @@ try {
         "C:\Program Files\Ollama", 
         "C:\Program Files\oh-my-posh\bin",
         "C:\Users\runneradmin\AppData\Local\Programs\oh-my-posh\bin",
-        "C:\Users\runneradmin\AppData\Roaming\npm"
+        "C:\Users\runneradmin\AppData\Roaming\npm",
+        "C:\Users\runneradmin\AppData\Local\Hermes",               # Tambahan buat path Hermes CLI
+        "C:\Users\runneradmin\AppData\Local\Hermes\hermes-agent"   # Tambahan buat path Hermes CLI
     )
     
     foreach ($p in $pathsToAdd) { if ($currentPath -notlike "*$p*") { $currentPath = "$currentPath;$p" } }
     Set-ItemProperty -Path $sysEnvRegistry -Name "Path" -Value $currentPath
-    Write-Host "[v] System PATH Update"
+    Write-Host "[v] System PATH Update (Termasuk path Hermes CLI)"
 } catch { Write-Warning "Gagal sync PATH" }
+
 
 # 12. CLONE DASHBOARD REPO (TARUH DI C:\Users\RDP\Desktop BIAR AMAN)
 try {
