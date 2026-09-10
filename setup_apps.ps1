@@ -9,11 +9,11 @@ $ProgressPreference = "SilentlyContinue"
 Set-ExecutionPolicy Bypass -Scope LocalMachine -Force
 
 Write-Host "=== Membuka Semua Kunci Akses (God Mode) ==="
-# Buka akses FULL ke folder runneradmin biar user lu bisa buka Discord/Spotify dari sana
-icacls "C:\Users\runneradmin" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-icacls "C:\Program Files" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-icacls "C:\ProgramData" /grant "Everyone:(OI)(CI)F" /T /C /Q | Out-Null
-Write-Host "[v] Akses tanpa batas diizinkan."
+# Nembak langsung ke folder target & nge-MUTE (bungkam) pesan error dari folder siluman Windows
+icacls "C:\Users\runneradmin\AppData\Local" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+icacls "C:\Users\runneradmin\AppData\Roaming" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+icacls "C:\ProgramData" /grant "Everyone:(OI)(CI)F" /T /C /Q 2>&1 | Out-Null
+Write-Host "[v] Akses tanpa batas diizinkan (Spam error berhasil disembunyikan)."
 
 Write-Host "`n=== Menginstall Aplikasi Utama ==="
 # Install NodeJS (buat Claude), VS Code, Discord, Spotify via Chocolatey
