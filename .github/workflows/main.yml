@@ -24,27 +24,29 @@ jobs:
           Restart-Service -Name TermService -Force
 
       - name: Create Custom RDP User
-        env:
-          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
-          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
-          # Ambil dari secret, kalo kosong kasih fallback "AdminRDP" biar ga error
-          $user = if ($env:RDP_USERNAME) { $env:RDP_USERNAME } else { "AdminRDP" }
-          $pass = if ($env:RDP_PASSWORD) { $env:RDP_PASSWORD } else { "P@ssw0rdKuat123!" }
-
+          # BIKIN USERNAME & PASSWORD LU DI SINI (Ganti tulisan di dalem tanda kutip)
+          $user = "Nelsen" 
+          $pass = "KetintangKeras2026!" 
+          
+          # Proses inject password beneran ke dalam sistem Windows
           $securePass = ConvertTo-SecureString $pass -AsPlainText -Force
           New-LocalUser -Name $user -Password $securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member $user
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $user
           
-          # Simpan nama dan pass ke global env biar step terakhir bisa nampilin
-          echo "CURRENT_USER=$user" >> $env:GITHUB_ENV
-          echo "CURRENT_PASS=$pass" >> $env:GITHUB_ENV
+          # Pake trik Out-File UTF8 biar variabelnya gak cacat karena encoding Windows
+          echo "CURRENT_USER=$user" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "CURRENT_PASS=$pass" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          
+          # Bikin Env Var global biar setup_apps.ps1 tetep jalan
+          echo "RDP_USERNAME=$user" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           
           if (-not (Get-LocalUser -Name $user)) {
               Write-Error "User creation failed"
               exit 1
           }
+
 
       - name: Run Setup Apps Script
         env:
