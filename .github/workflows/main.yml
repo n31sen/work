@@ -23,6 +23,40 @@ jobs:
 
           Restart-Service -Name TermService -Force
 
+      - name: Auto Restore Hermes Data (Dari Backup)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GH_USERNAME: ${{ secrets.GH_USERNAME }}
+        run: |
+          # Buat folder targetnya dulu biar ga error
+          $localAppData = "C:\Users\runneradmin\AppData\Local"
+          $roamingAppData = "C:\Users\runneradmin\AppData\Roaming"
+          
+          # Clone repo private lu yang isinya file backup
+          $backupRepo = "https://$($env:GH_USERNAME):$($env:GH_PAT)@github.com/$($env:GH_USERNAME)/hermes-backup.git"
+          $tempBackupDir = Join-Path $env:TEMP "hermes-backup-repo"
+          
+          try {
+              git clone -q $backupRepo $tempBackupDir
+              
+              # Ekstrak CLI Backup (Kalo ada)
+              $cliZip = "$tempBackupDir\hermes-cli-backup.zip"
+              if (Test-Path $cliZip) {
+                  Expand-Archive -Path $cliZip -DestinationPath $localAppData -Force
+                  Write-Host "[v] Hermes CLI Data sukses di-restore!"
+              }
+              
+              # Ekstrak Desktop Backup (Kalo ada)
+              $desktopZip = "$tempBackupDir\hermes-desktop-backup.zip"
+              if (Test-Path $desktopZip) {
+                  Expand-Archive -Path $desktopZip -DestinationPath $roamingAppData -Force
+                  Write-Host "[v] Hermes Desktop Data sukses di-restore!"
+              }
+          } catch {
+              Write-Warning "Backup belum ada atau gagal ditarik. Mulai dari nol yak."
+          }
+          
+
       - name: Create Custom RDP User
         run: |
           # BIKIN USERNAME & PASSWORD LU DI SINI (Ganti tulisan di dalem tanda kutip)
